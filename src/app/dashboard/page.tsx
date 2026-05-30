@@ -1,3 +1,4 @@
+export const dynamic = "force-dynamic";
 import { format } from "date-fns";
 import Link from "next/link";
 import { getUpcomingRaces, getTopHorses, getTopJockeys, getTopTrainers } from "@/lib/stats";

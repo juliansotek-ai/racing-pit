@@ -1,3 +1,4 @@
+export const dynamic = "force-dynamic";
 import { format, isToday, isTomorrow, startOfDay } from "date-fns";
 import { prisma } from "@/lib/prisma";
 import { GlassCard, Button } from "@/components/ui";
