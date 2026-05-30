@@ -1,0 +1,252 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── Auth (NextAuth) ─────────────────────────────────────────────────────────
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  emailVerified DateTime?
+  image         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  accounts  Account[]
+  sessions  Session[]
+  favorites Favorite[]
+  notes     Note[]
+  bets      Bet[]
+}
+
+model Account {
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([provider, providerAccountId])
+}
+
+model Session {
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String
+  expires    DateTime
+
+  @@id([identifier, token])
+}
+
+// ─── Racing Entities ─────────────────────────────────────────────────────────
+
+model Country {
+  id   String @id @default(cuid())
+  code String @unique // "DE", "FR", "GB"
+  name String
+
+  racecourses Racecourse[]
+  horses      Horse[]
+  trainers    Trainer[]
+  jockeys     Jockey[]
+}
+
+model Racecourse {
+  id        String @id @default(cuid())
+  name      String
+  city      String
+  countryId String
+  surface   String? // "turf", "dirt", "all-weather"
+  externalId String? @unique // ID from scraper source
+
+  country Country @relation(fields: [countryId], references: [id])
+  races   Race[]
+}
+
+model Trainer {
+  id         String  @id @default(cuid())
+  name       String
+  countryId  String
+  licenseNo  String?
+  externalId String? @unique
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  country  Country @relation(fields: [countryId], references: [id])
+  horses   Horse[]
+  favorites Favorite[]
+  notes    Note[]
+}
+
+model Jockey {
+  id         String  @id @default(cuid())
+  name       String
+  countryId  String
+  licenseNo  String?
+  weight     Float?  // kg
+  externalId String? @unique
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  country     Country      @relation(fields: [countryId], references: [id])
+  raceEntries RaceEntry[]
+  favorites   Favorite[]
+  notes       Note[]
+}
+
+model Horse {
+  id           String   @id @default(cuid())
+  name         String
+  countryId    String
+  trainerId    String?
+  dateOfBirth  DateTime?
+  gender       String?  // "mare", "gelding", "stallion", "colt", "filly"
+  color        String?
+  sire         String?  // father name
+  dam          String?  // mother name
+  externalId   String?  @unique
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  country     Country      @relation(fields: [countryId], references: [id])
+  trainer     Trainer?     @relation(fields: [trainerId], references: [id])
+  raceEntries RaceEntry[]
+  favorites   Favorite[]
+  notes       Note[]
+}
+
+model Race {
+  id           String   @id @default(cuid())
+  name         String
+  racecourseId String
+  scheduledAt  DateTime
+  distance     Int      // metres
+  surface      String?  // overrides racecourse surface if set
+  raceClass    String?  // "G1", "G2", "Listed", "Handicap", etc.
+  prize        Float?   // total prize money EUR
+  status       RaceStatus @default(SCHEDULED)
+  externalId   String?  @unique
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  racecourse  Racecourse  @relation(fields: [racecourseId], references: [id])
+  entries     RaceEntry[]
+}
+
+enum RaceStatus {
+  SCHEDULED
+  COMPLETED
+  CANCELLED
+  POSTPONED
+}
+
+model RaceEntry {
+  id          String  @id @default(cuid())
+  raceId      String
+  horseId     String
+  jockeyId    String?
+  saddleNo    Int?    // starting number
+  odds        Float?  // morning-line / starting odds
+  finishPos   Int?    // null until race completed
+  finishTime  Float?  // seconds, null until completed
+  weight      Float?  // carried weight kg
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  race    Race    @relation(fields: [raceId], references: [id])
+  horse   Horse   @relation(fields: [horseId], references: [id])
+  jockey  Jockey? @relation(fields: [jockeyId], references: [id])
+  bets    Bet[]
+
+  @@unique([raceId, horseId])
+}
+
+// ─── User Data ───────────────────────────────────────────────────────────────
+
+model Favorite {
+  id        String   @id @default(cuid())
+  userId    String
+  horseId   String?
+  jockeyId  String?
+  trainerId String?
+  createdAt DateTime @default(now())
+
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  horse   Horse?   @relation(fields: [horseId], references: [id], onDelete: Cascade)
+  jockey  Jockey?  @relation(fields: [jockeyId], references: [id], onDelete: Cascade)
+  trainer Trainer? @relation(fields: [trainerId], references: [id], onDelete: Cascade)
+
+  // Exactly one of horseId / jockeyId / trainerId must be set (enforced in app layer)
+  @@unique([userId, horseId])
+  @@unique([userId, jockeyId])
+  @@unique([userId, trainerId])
+}
+
+model Note {
+  id        String   @id @default(cuid())
+  userId    String
+  content   String
+  horseId   String?
+  jockeyId  String?
+  trainerId String?
+  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
+
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  horse   Horse?   @relation(fields: [horseId], references: [id], onDelete: Cascade)
+  jockey  Jockey?  @relation(fields: [jockeyId], references: [id], onDelete: Cascade)
+  trainer Trainer? @relation(fields: [trainerId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, horseId])
+  @@unique([userId, jockeyId])
+  @@unique([userId, trainerId])
+}
+
+model Bet {
+  id          String     @id @default(cuid())
+  userId      String
+  raceEntryId String
+  betType     BetType    @default(WIN)
+  stake       Float      // EUR
+  oddsAtBet   Float      // odds when bet was placed
+  result      BetResult?
+  payout      Float?     // actual payout in EUR, null until settled
+  settledAt   DateTime?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  raceEntry RaceEntry @relation(fields: [raceEntryId], references: [id])
+}
+
+enum BetType {
+  WIN
+  PLACE      // top 3
+  EACH_WAY   // win + place
+}
+
+enum BetResult {
+  WON
+  LOST
+  VOID
+}

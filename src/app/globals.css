@@ -1,0 +1,239 @@
+@import "tailwindcss";
+
+/* ─── Design Tokens ─────────────────────────────────────────────── */
+
+:root {
+  /* Background */
+  --background: #F5F7F5;
+  --background-mesh:
+    radial-gradient(ellipse at 15% 0%,   rgba(27, 67, 50, 0.07)  0%, transparent 55%),
+    radial-gradient(ellipse at 85% 5%,   rgba(15, 45, 82, 0.05)  0%, transparent 50%),
+    radial-gradient(ellipse at 50% 100%, rgba(27, 67, 50, 0.04)  0%, transparent 60%);
+
+  /* Glass surfaces */
+  --glass:         rgba(255, 255, 255, 0.62);
+  --glass-heavy:   rgba(255, 255, 255, 0.84);
+  --glass-subtle:  rgba(255, 255, 255, 0.38);
+  --glass-border:        rgba(255, 255, 255, 0.65);
+  --glass-border-subtle: rgba(255, 255, 255, 0.30);
+  --glass-shadow:    0 4px 24px rgba(0, 0, 0, 0.07), 0 1px 0 rgba(255,255,255,0.9) inset;
+  --glass-shadow-md: 0 8px 32px rgba(0, 0, 0, 0.09), 0 1px 0 rgba(255,255,255,0.9) inset;
+  --glass-shadow-lg: 0 20px 60px rgba(0, 0, 0, 0.12), 0 1px 0 rgba(255,255,255,0.95) inset;
+  --glass-blur:    blur(22px) saturate(180%);
+
+  /* Racing Green */
+  --green-950: #061A10;
+  --green-900: #0D2B1E;
+  --green-800: #1B4332;
+  --green-700: #2D6A4F;
+  --green-600: #40916C;
+  --green-500: #52B788;
+  --green-400: #74C69D;
+  --green-200: #B7E4C7;
+  --green-100: #D8F3DC;
+  --green-50:  #F0FAF3;
+
+  /* Racing Navy */
+  --navy-950: #020C1B;
+  --navy-900: #0A1628;
+  --navy-800: #0F2D52;
+  --navy-700: #1B3D6E;
+  --navy-600: #2356A0;
+  --navy-400: #6B9CD8;
+  --navy-100: #DBEAFE;
+  --navy-50:  #EFF6FF;
+
+  /* Neutrals */
+  --white:     #FFFFFF;
+  --gray-50:   #F8FAFB;
+  --gray-100:  #F1F5F2;
+  --gray-200:  #E2E8E4;
+  --gray-300:  #C8D5CC;
+  --gray-400:  #94A3A6;
+  --gray-500:  #6B7E7A;
+  --gray-600:  #4A6058;
+  --gray-900:  #0A1612;
+
+  /* Semantic */
+  --text-primary:   #0A1612;
+  --text-secondary: #4A6058;
+  --text-tertiary:  #94A3A6;
+  --text-inverse:   #FFFFFF;
+  --accent:         var(--green-800);
+  --accent-soft:    var(--green-600);
+  --accent-alt:     var(--navy-800);
+
+  /* Typography */
+  --font-display: var(--font-fraunces), Georgia, serif;
+  --font-body:    var(--font-geist-sans), system-ui, sans-serif;
+
+  /* Radius */
+  --radius-sm:   8px;
+  --radius-md:   14px;
+  --radius-lg:   20px;
+  --radius-xl:   28px;
+  --radius-2xl:  36px;
+  --radius-pill: 9999px;
+
+  /* Illustration placeholders */
+  --illustration-bg: linear-gradient(135deg, var(--green-50) 0%, var(--navy-50) 100%);
+  --illustration-border: var(--green-200);
+  --illustration-icon: var(--green-600);
+}
+
+/* ─── Tailwind theme extension ──────────────────────────────────── */
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--text-primary);
+  --font-sans: var(--font-body);
+  --font-display: var(--font-display);
+
+  /* Racing Green scale */
+  --color-green-950: var(--green-950);
+  --color-green-900: var(--green-900);
+  --color-green-800: var(--green-800);
+  --color-green-700: var(--green-700);
+  --color-green-600: var(--green-600);
+  --color-green-500: var(--green-500);
+  --color-green-400: var(--green-400);
+  --color-green-200: var(--green-200);
+  --color-green-100: var(--green-100);
+  --color-green-50:  var(--green-50);
+
+  /* Racing Navy scale */
+  --color-navy-950: var(--navy-950);
+  --color-navy-900: var(--navy-900);
+  --color-navy-800: var(--navy-800);
+  --color-navy-700: var(--navy-700);
+  --color-navy-600: var(--navy-600);
+  --color-navy-400: var(--navy-400);
+  --color-navy-100: var(--navy-100);
+  --color-navy-50:  var(--navy-50);
+
+  /* Semantic aliases */
+  --color-accent:      var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-alt:  var(--accent-alt);
+}
+
+/* ─── Base ──────────────────────────────────────────────────────── */
+
+body {
+  background-color: var(--background);
+  background-image: var(--background-mesh);
+  background-attachment: fixed;
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ─── Glass utilities ───────────────────────────────────────────── */
+
+.glass {
+  background: var(--glass);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow-md);
+}
+
+.glass-heavy {
+  background: var(--glass-heavy);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow-lg);
+}
+
+.glass-subtle {
+  background: var(--glass-subtle);
+  backdrop-filter: blur(12px) saturate(150%);
+  -webkit-backdrop-filter: blur(12px) saturate(150%);
+  border: 1px solid var(--glass-border-subtle);
+  box-shadow: var(--glass-shadow);
+}
+
+/* ─── Typography ────────────────────────────────────────────────── */
+
+.font-display { font-family: var(--font-display); }
+
+.display-2xl {
+  font-family: var(--font-display);
+  font-size: clamp(3rem, 6vw, 5.5rem);
+  font-weight: 300;
+  line-height: 1.05;
+  letter-spacing: -0.025em;
+}
+
+.display-xl {
+  font-family: var(--font-display);
+  font-size: clamp(2.25rem, 4.5vw, 4rem);
+  font-weight: 300;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+}
+
+.display-lg {
+  font-family: var(--font-display);
+  font-size: clamp(1.75rem, 3vw, 2.75rem);
+  font-weight: 400;
+  line-height: 1.15;
+  letter-spacing: -0.015em;
+}
+
+.display-md {
+  font-family: var(--font-display);
+  font-size: clamp(1.375rem, 2vw, 2rem);
+  font-weight: 400;
+  line-height: 1.2;
+}
+
+/* ─── Illustration placeholder ──────────────────────────────────── */
+
+.illustration-slot {
+  background: var(--illustration-bg);
+  border: 2px dashed var(--illustration-border);
+  border-radius: var(--radius-lg);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  color: var(--illustration-icon);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  overflow: hidden;
+  position: relative;
+  transition: border-color 0.2s ease;
+}
+
+.illustration-slot::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 30% 30%, rgba(27,67,50,0.06) 0%, transparent 60%),
+    radial-gradient(circle at 70% 70%, rgba(15,45,82,0.04) 0%, transparent 60%);
+  pointer-events: none;
+}
+
+/* ─── Scrollbar ─────────────────────────────────────────────────── */
+
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: var(--green-200);
+  border-radius: var(--radius-pill);
+}
+::-webkit-scrollbar-thumb:hover { background: var(--green-400); }
+
+/* ─── Selection ─────────────────────────────────────────────────── */
+
+::selection {
+  background: var(--green-200);
+  color: var(--green-900);
+}
