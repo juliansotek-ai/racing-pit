@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 
 const NAV_LINKS = [
   { href: "/dashboard",  label: "Dashboard",  icon: GridIcon },
+  { href: "/search",     label: "Search",      icon: SearchIcon },
   { href: "/races",      label: "Races",       icon: FlagIcon },
   { href: "/horses",     label: "Horses",      icon: HorseIcon },
   { href: "/jockeys",    label: "Jockeys",     icon: UserIcon },
@@ -120,6 +121,15 @@ function GridIcon({ size }: { size?: number }) {
       <rect x="14" y="3" width="7" height="7" rx="1" />
       <rect x="3" y="14" width="7" height="7" rx="1" />
       <rect x="14" y="14" width="7" height="7" rx="1" />
+    </Icon>
+  );
+}
+
+function SearchIcon({ size }: { size?: number }) {
+  return (
+    <Icon size={size}>
+      <circle cx="11" cy="11" r="8" />
+      <line x1="21" y1="21" x2="16.65" y2="16.65" />
     </Icon>
   );
 }

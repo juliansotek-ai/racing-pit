@@ -63,10 +63,11 @@ export function Navbar() {
                 aria-label="Account"
               >
                 {session.user?.image ? (
-                  /* eslint-disable-next-line @next/next/no-img-element */
-                  <img
+                  <Image
                     src={session.user.image}
                     alt={session.user.name ?? "Account"}
+                    width={36}
+                    height={36}
                     className="w-full h-full object-cover"
                   />
                 ) : (

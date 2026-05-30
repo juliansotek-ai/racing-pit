@@ -2,6 +2,23 @@ import { format, isToday, isTomorrow, startOfDay } from "date-fns";
 import { prisma } from "@/lib/prisma";
 import { GlassCard, Button } from "@/components/ui";
 import { RaceCard } from "@/components/RaceCard";
+import { Navbar } from "@/components/layout/navbar";
+
+async function getStats() {
+  const [betCount, settled] = await Promise.all([
+    prisma.bet.count(),
+    prisma.bet.aggregate({
+      where: { result: { not: null }, payout: { not: null } },
+      _sum: { stake: true, payout: true },
+    }),
+  ]);
+  const totalStake = settled._sum.stake ?? 0;
+  const totalPayout = settled._sum.payout ?? 0;
+  const roi = totalStake > 0
+    ? ((totalPayout - totalStake) / totalStake) * 100
+    : null;
+  return { betCount, roi };
+}
 
 async function getRaces() {
   const [upcoming, recent] = await Promise.all([
@@ -45,11 +62,17 @@ function dateLabel(iso: string) {
 }
 
 export default async function Home() {
-  const { upcoming, recent } = await getRaces();
+  const [{ upcoming, recent }, { betCount, roi }] = await Promise.all([
+    getRaces(),
+    getStats(),
+  ]);
   const grouped = groupByDate(upcoming);
+  const roiLabel = roi === null ? "—" : `${roi >= 0 ? "+" : ""}${roi.toFixed(1)}%`;
 
   return (
-    <main className="flex flex-col min-h-screen px-6 py-12 max-w-5xl mx-auto gap-14">
+    <div className="min-h-screen flex flex-col">
+    <Navbar />
+    <main className="flex flex-col px-6 py-12 max-w-5xl mx-auto w-full gap-14">
 
       {/* Hero */}
       <section className="flex flex-col gap-6 pt-8">
@@ -139,8 +162,8 @@ export default async function Home() {
           {[
             { label: "Upcoming races", value: String(upcoming.length) },
             { label: "Completed races", value: String(recent.length) },
-            { label: "Bets placed", value: "—" },
-            { label: "ROI", value: "—" },
+            { label: "Bets placed", value: betCount > 0 ? String(betCount) : "—" },
+            { label: "ROI", value: roiLabel },
           ].map(({ label, value }) => (
             <div key={label} className="flex flex-col gap-1">
               <span className="display-lg" style={{ color: "var(--green-800)" }}>{value}</span>
@@ -153,5 +176,6 @@ export default async function Home() {
       </GlassCard>
 
     </main>
+    </div>
   );
 }

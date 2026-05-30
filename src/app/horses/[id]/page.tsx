@@ -4,6 +4,7 @@ import { format, differenceInYears } from "date-fns";
 import { prisma } from "@/lib/prisma";
 import { GlassCard } from "@/components/ui";
 import { FavoriteButton } from "@/components/FavoriteButton";
+import { NoteEditor } from "@/components/NoteEditor";
 
 async function getHorse(id: string) {
   return prisma.horse.findUnique({
@@ -156,6 +157,8 @@ export default async function HorsePage({
           </div>
         )}
       </section>
+
+      <NoteEditor horseId={horse.id} />
     </main>
   );
 }

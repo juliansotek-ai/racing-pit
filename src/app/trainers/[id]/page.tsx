@@ -4,6 +4,7 @@ import { format } from "date-fns";
 import { prisma } from "@/lib/prisma";
 import { GlassCard } from "@/components/ui";
 import { FavoriteButton } from "@/components/FavoriteButton";
+import { NoteEditor } from "@/components/NoteEditor";
 
 async function getTrainer(id: string) {
   return prisma.trainer.findUnique({
@@ -207,6 +208,8 @@ export default async function TrainerPage({
           </div>
         )}
       </section>
+
+      <NoteEditor trainerId={trainer.id} />
     </main>
   );
 }

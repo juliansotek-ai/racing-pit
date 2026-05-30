@@ -47,6 +47,32 @@ export const betsRouter = createTRPCRouter({
       });
     }),
 
+  settle: protectedProcedure
+    .input(
+      z.object({
+        betId: z.string(),
+        result: z.enum(["WON", "LOST", "VOID"]),
+        payout: z.number().nonnegative().optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const bet = await ctx.prisma.bet.findFirst({
+        where: { id: input.betId, userId: ctx.session.user.id },
+      });
+      if (!bet) throw new Error("Bet not found");
+      if (bet.result != null) throw new Error("Bet already settled");
+
+      const payout =
+        input.result === "WON"
+          ? (input.payout ?? bet.stake * bet.oddsAtBet)
+          : 0;
+
+      return ctx.prisma.bet.update({
+        where: { id: input.betId },
+        data: { result: input.result, payout, settledAt: new Date() },
+      });
+    }),
+
   stats: protectedProcedure.query(async ({ ctx }) => {
     const bets = await ctx.prisma.bet.findMany({
       where: { userId: ctx.session.user.id, result: { not: null } },

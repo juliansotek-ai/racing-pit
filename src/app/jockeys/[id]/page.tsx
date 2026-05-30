@@ -4,6 +4,7 @@ import { format } from "date-fns";
 import { prisma } from "@/lib/prisma";
 import { GlassCard } from "@/components/ui";
 import { FavoriteButton } from "@/components/FavoriteButton";
+import { NoteEditor } from "@/components/NoteEditor";
 
 async function getJockey(id: string) {
   return prisma.jockey.findUnique({
@@ -137,6 +138,8 @@ export default async function JockeyPage({
           </div>
         )}
       </section>
+
+      <NoteEditor jockeyId={jockey.id} />
     </main>
   );
 }

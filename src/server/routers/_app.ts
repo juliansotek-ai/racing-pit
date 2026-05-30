@@ -5,6 +5,8 @@ import { jockeysRouter } from "./jockeys";
 import { trainersRouter } from "./trainers";
 import { favoritesRouter } from "./favorites";
 import { betsRouter } from "./bets";
+import { notesRouter } from "./notes";
+import { searchRouter } from "./search";
 
 export const appRouter = createTRPCRouter({
   horses: horsesRouter,
@@ -13,6 +15,8 @@ export const appRouter = createTRPCRouter({
   trainers: trainersRouter,
   favorites: favoritesRouter,
   bets: betsRouter,
+  notes: notesRouter,
+  search: searchRouter,
 });
 
 export type AppRouter = typeof appRouter;
