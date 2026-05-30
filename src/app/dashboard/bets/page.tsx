@@ -4,6 +4,7 @@ import { format } from "date-fns";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { GlassCard } from "@/components/ui";
+import { SettleBetButton } from "@/components/SettleBetButton";
 
 async function getBets(userId: string) {
   return prisma.bet.findMany({
@@ -42,7 +43,7 @@ function computeSummary(bets: Bet[]) {
 
 export default async function BetsPage() {
   const session = await auth();
-  if (!session) redirect("/auth/signin");
+  if (!session?.user?.id) redirect("/auth/signin");
 
   const bets = await getBets(session.user.id);
   const summary = computeSummary(bets);
@@ -128,7 +129,7 @@ export default async function BetsPage() {
                 Pending ({pending.length})
               </h2>
               {pending.map((bet) => (
-                <BetRow key={bet.id} bet={bet} />
+                <BetRow key={bet.id} bet={bet} showSettle />
               ))}
             </section>
           )}
@@ -150,7 +151,7 @@ export default async function BetsPage() {
   );
 }
 
-function BetRow({ bet }: { bet: Bet }) {
+function BetRow({ bet, showSettle }: { bet: Bet; showSettle?: boolean }) {
   const entry = bet.raceEntry;
   const isWon = bet.result === "WON";
   const isLost = bet.result === "LOST";
@@ -227,6 +228,12 @@ function BetRow({ bet }: { bet: Bet }) {
                   : bet.result}
               </span>
             </div>
+          ) : showSettle ? (
+            <SettleBetButton
+              betId={bet.id}
+              stake={bet.stake}
+              oddsAtBet={bet.oddsAtBet}
+            />
           ) : (
             <span
               className="text-xs font-medium px-2.5 py-1 rounded-full"
