@@ -8,6 +8,7 @@ const NAV_LINKS = [
   { href: "/dashboard",  label: "Dashboard",  icon: GridIcon },
   { href: "/search",     label: "Search",      icon: SearchIcon },
   { href: "/races",      label: "Races",       icon: FlagIcon },
+  { href: "/favorites",  label: "Favourites",  icon: HeartIcon },
   { href: "/horses",     label: "Horses",      icon: HorseIcon },
   { href: "/jockeys",    label: "Jockeys",     icon: UserIcon },
   { href: "/trainers",   label: "Trainers",    icon: ClipboardIcon },
@@ -202,6 +203,14 @@ function RaceDayIcon({ size }: { size?: number }) {
       <line x1="8" y1="2" x2="8" y2="6" />
       <line x1="3" y1="10" x2="21" y2="10" />
       <circle cx="12" cy="16" r="2" fill="currentColor" stroke="none" />
+    </Icon>
+  );
+}
+
+function HeartIcon({ size }: { size?: number }) {
+  return (
+    <Icon size={size}>
+      <path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z" />
     </Icon>
   );
 }
