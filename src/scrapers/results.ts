@@ -171,10 +171,19 @@ interface RaceRef {
   prizeRaw: string;
   kategorie: string;
   klasse: string;
+  going: string | null;
+}
+
+function parseGoing(html: string): string | null {
+  const $ = cheerio.load(html);
+  const text = $(".druckversion-oben").first().text();
+  const m = text.match(/Boden[:\s]+([^\n<]+)/i);
+  return m ? m[1].trim() : null;
 }
 
 function parseRaceDayPage(html: string): RaceRef[] {
   const $ = cheerio.load(html);
+  const going = parseGoing(html);
   const refs: RaceRef[] = [];
 
   $(".kompletter-kasten-das-rennen").each((_, block) => {
@@ -202,7 +211,7 @@ function parseRaceDayPage(html: string): RaceRef[] {
     const kategorie = $(bTags[0]).text().trim();
     const klasse = $(bTags[1]).text().trim();
 
-    refs.push({ displayErgebnisUrl: url, resultId, raceNo, name, time, distanceRaw, prizeRaw, kategorie, klasse });
+    refs.push({ displayErgebnisUrl: url, resultId, raceNo, name, time, distanceRaw, prizeRaw, kategorie, klasse, going });
   });
 
   return refs;
@@ -260,27 +269,39 @@ async function persistRace(
   racecourseId: string,
   entries: EntryData[],
 ): Promise<number> {
-  const externalId = `gs-result-${ref.resultId}`;
+  const resultExternalId = `gs-result-${ref.resultId}`;
+  // Matches the ID the upcoming-races scraper assigns before the race runs
+  const upcomingExternalId = `gs-race-${datePart}-${ortCode.toLowerCase()}-r${ref.raceNo}`;
   const scheduledAt = buildDate(datePart, ref.time);
 
-  let race = await prisma.race.findUnique({ where: { externalId } });
+  // Check both IDs so we don't create a duplicate when the upcoming scraper ran first
+  let race = await prisma.race.findFirst({
+    where: { externalId: { in: [resultExternalId, upcomingExternalId] } },
+  });
+
   if (!race) {
     race = await prisma.race.create({
       data: {
-        externalId,
+        externalId: resultExternalId,
         name: ref.name || `Rennen ${ref.raceNo}`,
         racecourseId,
         scheduledAt,
         distance: parseDistance(ref.distanceRaw) ?? 0,
         raceClass: ref.klasse || ref.kategorie || null,
         prize: parsePrize(ref.prizeRaw),
+        going: ref.going,
         status: "COMPLETED",
       },
     });
   } else {
     await prisma.race.update({
       where: { id: race.id },
-      data: { status: "COMPLETED" },
+      data: {
+        status: "COMPLETED",
+        going: ref.going ?? race.going,
+        // Migrate the ID to the result-based one so subsequent runs find it correctly
+        ...(race.externalId !== resultExternalId ? { externalId: resultExternalId } : {}),
+      },
     });
   }
 

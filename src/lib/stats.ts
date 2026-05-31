@@ -96,6 +96,41 @@ export async function getTopTrainers(limit = 10) {
     .slice(0, limit);
 }
 
+export async function getFollowedHorsesRacingToday(userId: string) {
+  const todayStart = new Date();
+  todayStart.setUTCHours(0, 0, 0, 0);
+  const todayEnd = new Date(todayStart);
+  todayEnd.setUTCDate(todayEnd.getUTCDate() + 1);
+
+  const favorites = await prisma.favorite.findMany({
+    where: { userId, horseId: { not: null } },
+    select: { horseId: true },
+  });
+
+  const horseIds = favorites.map((f) => f.horseId!);
+  if (horseIds.length === 0) return [];
+
+  return prisma.raceEntry.findMany({
+    where: {
+      horseId: { in: horseIds },
+      race: {
+        scheduledAt: { gte: todayStart, lt: todayEnd },
+        status: { in: ["SCHEDULED", "COMPLETED"] },
+      },
+    },
+    include: {
+      horse: { select: { id: true, name: true } },
+      jockey: { select: { id: true, name: true } },
+      race: {
+        include: {
+          racecourse: { select: { id: true, name: true, city: true } },
+        },
+      },
+    },
+    orderBy: { race: { scheduledAt: "asc" } },
+  });
+}
+
 export async function getUpcomingMeetings(limit = 6) {
   const races = await prisma.race.findMany({
     where: { status: "SCHEDULED", scheduledAt: { gte: new Date() } },

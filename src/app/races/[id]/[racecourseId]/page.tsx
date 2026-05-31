@@ -4,6 +4,7 @@ import Link from "next/link";
 import { format } from "date-fns";
 import { prisma } from "@/lib/prisma";
 import { GlassCard } from "@/components/ui";
+import { BetButton } from "@/components/BetButton";
 
 async function getMeeting(date: string, racecourseId: string) {
   // Validate the date param
@@ -69,13 +70,13 @@ function EntryRow({ entry, isCompleted }: { entry: Entry; isCompleted: boolean }
   const isWinner = entry.finishPos === 1;
   const isPlaced = entry.finishPos != null && entry.finishPos <= 3;
   return (
+    <div style={{ borderTop: "1px solid var(--glass-border-subtle)" }}>
     <div
       className={`relative grid items-center gap-3 px-4 py-2.5 ${
         isCompleted
           ? "grid-cols-[2rem_2rem_1fr_4rem] sm:grid-cols-[2rem_2rem_1fr_1fr_1fr_4rem]"
           : "grid-cols-[2rem_1fr_4rem] sm:grid-cols-[2rem_1fr_1fr_1fr_4rem]"
       }`}
-      style={{ borderTop: "1px solid var(--glass-border-subtle)" }}
     >
       {isWinner && (
         <div
@@ -165,6 +166,16 @@ function EntryRow({ entry, isCompleted }: { entry: Entry; isCompleted: boolean }
       >
         {entry.odds != null ? `${entry.odds.toFixed(1)}x` : "—"}
       </span>
+    </div>
+    {!isCompleted && (
+      <div className="px-4 pb-2">
+        <BetButton
+          raceEntryId={entry.id}
+          horseName={entry.horse.name}
+          defaultOdds={entry.odds}
+        />
+      </div>
+    )}
     </div>
   );
 }

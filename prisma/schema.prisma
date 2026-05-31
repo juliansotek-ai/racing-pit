@@ -142,6 +142,7 @@ model Race {
   scheduledAt  DateTime
   distance     Int      // metres
   surface      String?  // overrides racecourse surface if set
+  going        String?  // ground conditions, e.g. "gut", "weich", "fest"
   raceClass    String?  // "G1", "G2", "Listed", "Handicap", etc.
   prize        Float?   // total prize money EUR
   status       RaceStatus @default(SCHEDULED)

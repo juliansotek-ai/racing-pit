@@ -6,6 +6,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { GlassCard } from "@/components/ui";
 import { SettleBetButton } from "@/components/SettleBetButton";
+import { BetsTabStrip } from "@/components/BetsTabStrip";
 
 async function getBets(userId: string) {
   return prisma.bet.findMany({
@@ -74,6 +75,8 @@ export default async function BetsPage() {
           ← Dashboard
         </Link>
       </div>
+
+      <BetsTabStrip />
 
       {/* Summary stats */}
       <GlassCard variant="default" radius="2xl" padding="lg">

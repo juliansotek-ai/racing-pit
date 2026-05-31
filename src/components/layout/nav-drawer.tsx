@@ -12,6 +12,7 @@ const NAV_LINKS = [
   { href: "/jockeys",    label: "Jockeys",     icon: UserIcon },
   { href: "/trainers",   label: "Trainers",    icon: ClipboardIcon },
   { href: "/dashboard/bets", label: "My Bets", icon: TicketIcon },
+  { href: "/dashboard/bets/today", label: "Race Day", icon: RaceDayIcon },
 ];
 
 interface NavDrawerProps {
@@ -71,7 +72,10 @@ export function NavDrawer({ open, onClose }: NavDrawerProps) {
         {/* Nav links */}
         <nav className="flex-1 px-3 py-4 flex flex-col gap-1">
           {NAV_LINKS.map(({ href, label, icon: Icon }) => {
-            const active = pathname === href || pathname.startsWith(href + "/");
+            const active =
+              href === "/dashboard/bets"
+                ? pathname === href
+                : pathname === href || pathname.startsWith(href + "/");
             return (
               <Link
                 key={href}
@@ -187,5 +191,17 @@ function XIcon() {
       <line x1="18" y1="6" x2="6" y2="18" />
       <line x1="6" y1="6" x2="18" y2="18" />
     </svg>
+  );
+}
+
+function RaceDayIcon({ size }: { size?: number }) {
+  return (
+    <Icon size={size}>
+      <rect x="3" y="4" width="18" height="18" rx="2" />
+      <line x1="16" y1="2" x2="16" y2="6" />
+      <line x1="8" y1="2" x2="8" y2="6" />
+      <line x1="3" y1="10" x2="21" y2="10" />
+      <circle cx="12" cy="16" r="2" fill="currentColor" stroke="none" />
+    </Icon>
   );
 }

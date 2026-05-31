@@ -166,10 +166,19 @@ interface RaceRef {
   prizeRaw: string;
   kategorie: string;
   klasse: string;
+  going: string | null;
+}
+
+function parseGoing(html: string): string | null {
+  const $ = cheerio.load(html);
+  const text = $(".druckversion-oben").first().text();
+  const m = text.match(/Boden[:\s]+([^\n<]+)/i);
+  return m ? m[1].trim() : null;
 }
 
 function parseUpcomingDayPage(html: string, meetingDatePart: string, meetingOrtCode: string): RaceRef[] {
   const $ = cheerio.load(html);
+  const going = parseGoing(html);
   const refs: RaceRef[] = [];
 
   $(".kompletter-kasten-das-rennen").each((_, block) => {
@@ -194,7 +203,7 @@ function parseUpcomingDayPage(html: string, meetingDatePart: string, meetingOrtC
     const kategorie = $(bTags[0]).text().trim();
     const klasse = $(bTags[1]).text().trim();
 
-    refs.push({ detailUrl: url, datePart, ortCode, raceNum, raceNo, name, time, distanceRaw, prizeRaw, kategorie, klasse });
+    refs.push({ detailUrl: url, datePart, ortCode, raceNum, raceNo, name, time, distanceRaw, prizeRaw, kategorie, klasse, going });
   });
 
   return refs;
@@ -261,6 +270,7 @@ async function persistUpcomingRace(
       distance: parseDistance(ref.distanceRaw) ?? 0,
       raceClass: ref.klasse || ref.kategorie || null,
       prize: parsePrize(ref.prizeRaw),
+      going: ref.going,
       status: "SCHEDULED",
     },
     update: {
@@ -269,6 +279,7 @@ async function persistUpcomingRace(
       distance: parseDistance(ref.distanceRaw) ?? 0,
       raceClass: ref.klasse || ref.kategorie || null,
       prize: parsePrize(ref.prizeRaw),
+      ...(ref.going ? { going: ref.going } : {}),
     },
   });
 
