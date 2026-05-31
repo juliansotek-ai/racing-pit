@@ -1,40 +1,58 @@
 export const dynamic = "force-dynamic";
 import Link from "next/link";
+import { Suspense } from "react";
 import { prisma } from "@/lib/prisma";
 import { GlassCard } from "@/components/ui";
 import { auth } from "@/lib/auth";
 import { HorsesTable, type HorseRow } from "@/components/HorsesTable";
+import { SearchBar } from "@/components/SearchBar";
+import { Pagination } from "@/components/Pagination";
 
-async function getAllHorses(): Promise<HorseRow[]> {
-  const horses = await prisma.horse.findMany({
-    include: {
-      trainer: { select: { id: true, name: true } },
-      country: { select: { name: true } },
-      raceEntries: {
-        where: { finishPos: { not: null } },
-        select: { finishPos: true },
+const LIMIT = 50;
+
+async function getHorses(search: string, skip: number): Promise<{ items: HorseRow[]; total: number }> {
+  const where = search
+    ? { name: { contains: search, mode: "insensitive" as const } }
+    : undefined;
+
+  const [horses, total] = await Promise.all([
+    prisma.horse.findMany({
+      where,
+      include: {
+        trainer: { select: { id: true, name: true } },
+        country: { select: { name: true } },
+        raceEntries: {
+          where: { finishPos: { not: null } },
+          select: { finishPos: true },
+        },
       },
-    },
-    orderBy: { name: "asc" },
-  });
+      orderBy: { name: "asc" },
+      skip,
+      take: LIMIT,
+    }),
+    prisma.horse.count({ where }),
+  ]);
 
-  return horses.map((h) => {
-    const positions = h.raceEntries.map((e) => e.finishPos!);
-    const wins = positions.filter((p) => p === 1).length;
-    return {
-      id: h.id,
-      name: h.name,
-      gender: h.gender,
-      country: h.country,
-      trainer: h.trainer,
-      totalRaces: positions.length,
-      wins,
-      avgPos:
-        positions.length > 0
-          ? (positions.reduce((a, b) => a + b, 0) / positions.length).toFixed(1)
-          : null,
-    };
-  });
+  return {
+    items: horses.map((h) => {
+      const positions = h.raceEntries.map((e) => e.finishPos!);
+      const wins = positions.filter((p) => p === 1).length;
+      return {
+        id: h.id,
+        name: h.name,
+        gender: h.gender,
+        country: h.country,
+        trainer: h.trainer,
+        totalRaces: positions.length,
+        wins,
+        avgPos:
+          positions.length > 0
+            ? (positions.reduce((a, b) => a + b, 0) / positions.length).toFixed(1)
+            : null,
+      };
+    }),
+    total,
+  };
 }
 
 async function getFavoriteHorses(userId: string): Promise<HorseRow[]> {
@@ -102,13 +120,22 @@ async function getFavoriteHorses(userId: string): Promise<HorseRow[]> {
     .sort((a, b) => b.wins - a.wins);
 }
 
-export default async function HorsesPage() {
+export default async function HorsesPage(props: {
+  searchParams: Promise<{ page?: string; search?: string }>;
+}) {
+  const searchParams = await props.searchParams;
+  const search = searchParams.search ?? "";
+  const page = Math.max(1, parseInt(searchParams.page ?? "1", 10));
+  const skip = (page - 1) * LIMIT;
+
   const session = await auth();
 
-  const [horses, favoriteHorses] = await Promise.all([
-    getAllHorses(),
+  const [{ items: horses, total }, favoriteHorses] = await Promise.all([
+    getHorses(search, skip),
     session?.user?.id ? getFavoriteHorses(session.user.id) : Promise.resolve(null),
   ]);
+
+  const totalPages = Math.max(1, Math.ceil(total / LIMIT));
 
   return (
     <main className="max-w-6xl mx-auto px-4 sm:px-6 py-10 flex flex-col gap-8">
@@ -117,7 +144,7 @@ export default async function HorsesPage() {
         <div className="flex flex-col gap-1">
           <h1 className="display-xl" style={{ color: "var(--green-900)" }}>Horses</h1>
           <p className="text-sm" style={{ color: "var(--text-tertiary)" }}>
-            {horses.length} registered
+            {total} registered
           </p>
         </div>
         <Link
@@ -144,9 +171,20 @@ export default async function HorsesPage() {
         </div>
       )}
 
-      <GlassCard variant="default" radius="xl" padding="md">
-        <HorsesTable horses={horses} emptyMessage="No horses registered yet." />
-      </GlassCard>
+      <div className="flex flex-col gap-3">
+        <div className="flex items-center justify-between gap-4">
+          <h2 className="text-xs font-semibold tracking-widest uppercase" style={{ color: "var(--text-secondary)" }}>
+            All Horses
+          </h2>
+          <Suspense fallback={null}>
+            <SearchBar placeholder="Search horses…" />
+          </Suspense>
+        </div>
+        <GlassCard variant="default" radius="xl" padding="md">
+          <HorsesTable horses={horses} emptyMessage={search ? "No horses match your search." : "No horses registered yet."} />
+          <Pagination page={page} totalPages={totalPages} total={total} limit={LIMIT} search={search} basePath="/horses" />
+        </GlassCard>
+      </div>
 
     </main>
   );

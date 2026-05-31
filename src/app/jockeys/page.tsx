@@ -1,38 +1,56 @@
 export const dynamic = "force-dynamic";
 import Link from "next/link";
+import { Suspense } from "react";
 import { prisma } from "@/lib/prisma";
 import { GlassCard } from "@/components/ui";
 import { auth } from "@/lib/auth";
 import { JockeysTable, type JockeyRow } from "@/components/JockeysTable";
+import { SearchBar } from "@/components/SearchBar";
+import { Pagination } from "@/components/Pagination";
 
-async function getAllJockeys(): Promise<JockeyRow[]> {
-  const jockeys = await prisma.jockey.findMany({
-    include: {
-      country: { select: { name: true } },
-      raceEntries: {
-        where: { finishPos: { not: null } },
-        select: { finishPos: true },
+const LIMIT = 50;
+
+async function getJockeys(search: string, skip: number): Promise<{ items: JockeyRow[]; total: number }> {
+  const where = search
+    ? { name: { contains: search, mode: "insensitive" as const } }
+    : undefined;
+
+  const [jockeys, total] = await Promise.all([
+    prisma.jockey.findMany({
+      where,
+      include: {
+        country: { select: { name: true } },
+        raceEntries: {
+          where: { finishPos: { not: null } },
+          select: { finishPos: true },
+        },
       },
-    },
-    orderBy: { name: "asc" },
-  });
+      orderBy: { name: "asc" },
+      skip,
+      take: LIMIT,
+    }),
+    prisma.jockey.count({ where }),
+  ]);
 
-  return jockeys.map((j) => {
-    const positions = j.raceEntries.map((e) => e.finishPos!);
-    const wins = positions.filter((p) => p === 1).length;
-    return {
-      id: j.id,
-      name: j.name,
-      country: j.country,
-      totalRides: positions.length,
-      wins,
-      winRate: positions.length > 0 ? Math.round((wins / positions.length) * 100) : null,
-      avgPos:
-        positions.length > 0
-          ? (positions.reduce((a, b) => a + b, 0) / positions.length).toFixed(1)
-          : null,
-    };
-  });
+  return {
+    items: jockeys.map((j) => {
+      const positions = j.raceEntries.map((e) => e.finishPos!);
+      const wins = positions.filter((p) => p === 1).length;
+      return {
+        id: j.id,
+        name: j.name,
+        country: j.country,
+        totalRides: positions.length,
+        wins,
+        winRate: positions.length > 0 ? Math.round((wins / positions.length) * 100) : null,
+        avgPos:
+          positions.length > 0
+            ? (positions.reduce((a, b) => a + b, 0) / positions.length).toFixed(1)
+            : null,
+      };
+    }),
+    total,
+  };
 }
 
 async function getFavoriteJockeys(userId: string): Promise<JockeyRow[]> {
@@ -99,13 +117,22 @@ async function getFavoriteJockeys(userId: string): Promise<JockeyRow[]> {
     .sort((a, b) => b.wins - a.wins);
 }
 
-export default async function JockeysPage() {
+export default async function JockeysPage(props: {
+  searchParams: Promise<{ page?: string; search?: string }>;
+}) {
+  const searchParams = await props.searchParams;
+  const search = searchParams.search ?? "";
+  const page = Math.max(1, parseInt(searchParams.page ?? "1", 10));
+  const skip = (page - 1) * LIMIT;
+
   const session = await auth();
 
-  const [jockeys, favoriteJockeys] = await Promise.all([
-    getAllJockeys(),
+  const [{ items: jockeys, total }, favoriteJockeys] = await Promise.all([
+    getJockeys(search, skip),
     session?.user?.id ? getFavoriteJockeys(session.user.id) : Promise.resolve(null),
   ]);
+
+  const totalPages = Math.max(1, Math.ceil(total / LIMIT));
 
   return (
     <main className="max-w-6xl mx-auto px-4 sm:px-6 py-10 flex flex-col gap-8">
@@ -114,7 +141,7 @@ export default async function JockeysPage() {
         <div className="flex flex-col gap-1">
           <h1 className="display-xl" style={{ color: "var(--green-900)" }}>Jockeys</h1>
           <p className="text-sm" style={{ color: "var(--text-tertiary)" }}>
-            {jockeys.length} registered
+            {total} registered
           </p>
         </div>
         <Link
@@ -141,9 +168,20 @@ export default async function JockeysPage() {
         </div>
       )}
 
-      <GlassCard variant="default" radius="xl" padding="md">
-        <JockeysTable jockeys={jockeys} emptyMessage="No jockeys registered yet." />
-      </GlassCard>
+      <div className="flex flex-col gap-3">
+        <div className="flex items-center justify-between gap-4">
+          <h2 className="text-xs font-semibold tracking-widest uppercase" style={{ color: "var(--text-secondary)" }}>
+            All Jockeys
+          </h2>
+          <Suspense fallback={null}>
+            <SearchBar placeholder="Search jockeys…" />
+          </Suspense>
+        </div>
+        <GlassCard variant="default" radius="xl" padding="md">
+          <JockeysTable jockeys={jockeys} emptyMessage={search ? "No jockeys match your search." : "No jockeys registered yet."} />
+          <Pagination page={page} totalPages={totalPages} total={total} limit={LIMIT} search={search} basePath="/jockeys" />
+        </GlassCard>
+      </div>
 
     </main>
   );
