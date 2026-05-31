@@ -1,14 +1,60 @@
 export const dynamic = "force-dynamic";
 import { format } from "date-fns";
 import Link from "next/link";
-import { getUpcomingRaces, getTopHorses, getTopJockeys, getTopTrainers } from "@/lib/stats";
-import { RaceCard } from "@/components/RaceCard";
-import { LeaderboardTable, IllustrationSlot } from "@/components/ui";
+import { getUpcomingMeetings, getTopHorses, getTopJockeys, getTopTrainers } from "@/lib/stats";
+import { GlassCard, LeaderboardTable, IllustrationSlot } from "@/components/ui";
 import type { LeaderboardRow } from "@/components/ui";
 
+type Meeting = Awaited<ReturnType<typeof getUpcomingMeetings>>[number];
+
+function MeetingCard({ meeting }: { meeting: Meeting }) {
+  return (
+    <Link href={`/races/${meeting.date}/${meeting.racecourseId}`} className="block group">
+      <GlassCard
+        variant="default"
+        radius="xl"
+        padding="lg"
+        className="flex flex-col gap-3 h-full transition-shadow duration-200 group-hover:shadow-[var(--glass-shadow-md)]"
+      >
+        <div className="flex flex-col gap-0.5 min-w-0">
+          <span
+            className="font-semibold text-base leading-snug"
+            style={{ color: "var(--text-primary)", fontFamily: "var(--font-display)" }}
+          >
+            {format(meeting.firstStart, "EEE, d MMM yyyy")}
+          </span>
+          <span className="text-sm" style={{ color: "var(--text-secondary)" }}>
+            {meeting.racecourse.name} · {meeting.racecourse.city}
+          </span>
+        </div>
+        <div className="flex flex-wrap gap-x-4 gap-y-1">
+          <Stat label="Races" value={String(meeting.raceCount)} />
+          <Stat label="First off" value={format(meeting.firstStart, "HH:mm")} />
+          {meeting.totalRunners > 0 && (
+            <Stat label="Runners" value={String(meeting.totalRunners)} />
+          )}
+        </div>
+      </GlassCard>
+    </Link>
+  );
+}
+
+function Stat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex flex-col gap-0">
+      <span className="text-xs font-medium tracking-wide uppercase" style={{ color: "var(--text-tertiary)" }}>
+        {label}
+      </span>
+      <span className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+        {value}
+      </span>
+    </div>
+  );
+}
+
 export default async function DashboardPage() {
-  const [upcomingRaces, topHorses, topJockeys, topTrainers] = await Promise.all([
-    getUpcomingRaces(6),
+  const [upcomingMeetings, topHorses, topJockeys, topTrainers] = await Promise.all([
+    getUpcomingMeetings(6),
     getTopHorses(10),
     getTopJockeys(10),
     getTopTrainers(10),
@@ -67,16 +113,16 @@ export default async function DashboardPage() {
         </p>
       </div>
 
-      {/* ── Upcoming Races ─────────────────────────────────────────── */}
+      {/* ── Upcoming Meetings ──────────────────────────────────────── */}
       <section className="flex flex-col gap-4">
-        <SectionHeader title="Upcoming Races" href="/races" count={upcomingRaces.length} />
+        <SectionHeader title="Upcoming Meetings" href="/races" count={upcomingMeetings.length} />
 
-        {upcomingRaces.length === 0 ? (
+        {upcomingMeetings.length === 0 ? (
           <EmptyState label="No upcoming races" />
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {upcomingRaces.map((race) => (
-              <RaceCard key={race.id} race={race} />
+            {upcomingMeetings.map((m) => (
+              <MeetingCard key={`${m.date}:${m.racecourseId}`} meeting={m} />
             ))}
           </div>
         )}

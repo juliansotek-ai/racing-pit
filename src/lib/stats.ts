@@ -96,14 +96,51 @@ export async function getTopTrainers(limit = 10) {
     .slice(0, limit);
 }
 
-export async function getUpcomingRaces(limit = 6) {
-  return prisma.race.findMany({
+export async function getUpcomingMeetings(limit = 6) {
+  const races = await prisma.race.findMany({
     where: { status: "SCHEDULED", scheduledAt: { gte: new Date() } },
     include: {
-      racecourse: { select: { name: true, city: true } },
+      racecourse: { select: { id: true, name: true, city: true } },
       entries: { select: { id: true } },
     },
     orderBy: { scheduledAt: "asc" },
-    take: limit,
+    take: 300,
   });
+
+  const map = new Map<
+    string,
+    {
+      date: string;
+      racecourseId: string;
+      racecourse: { name: string; city: string };
+      raceCount: number;
+      firstStart: Date;
+      totalRunners: number;
+    }
+  >();
+
+  for (const race of races) {
+    const dateStr = new Date(race.scheduledAt).toISOString().slice(0, 10);
+    const key = `${dateStr}:${race.racecourseId}`;
+    if (!map.has(key)) {
+      map.set(key, {
+        date: dateStr,
+        racecourseId: race.racecourseId,
+        racecourse: race.racecourse,
+        raceCount: 0,
+        firstStart: new Date(race.scheduledAt),
+        totalRunners: 0,
+      });
+    }
+    const m = map.get(key)!;
+    m.raceCount++;
+    m.totalRunners += race.entries.length;
+    if (new Date(race.scheduledAt) < m.firstStart) {
+      m.firstStart = new Date(race.scheduledAt);
+    }
+  }
+
+  return Array.from(map.values())
+    .sort((a, b) => a.firstStart.getTime() - b.firstStart.getTime())
+    .slice(0, limit);
 }
