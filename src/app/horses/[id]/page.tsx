@@ -130,19 +130,54 @@ export default async function HorsePage({
             Upcoming races
           </h2>
           <div className="flex flex-col gap-2">
-            <FormHeader upcoming />
-            {upcomingEntries.map((entry) => (
-              <FormRow key={entry.id} entry={entry} upcoming />
-            ))}
+            <div
+              className="hidden sm:grid gap-4 px-4 pb-1 text-xs font-semibold tracking-widest uppercase"
+              style={{ color: "var(--text-tertiary)", gridTemplateColumns: "1fr 1fr 5rem 4rem 4rem" }}
+            >
+              <span>Race</span>
+              <span>Jockey</span>
+              <span>Conditions</span>
+              <span className="text-right">Dist</span>
+              <span className="text-right">Saddle</span>
+            </div>
+            {upcomingEntries.map((entry) => {
+              const conditions = [entry.race.raceClass, entry.race.surface ? capitalize(entry.race.surface) : null]
+                .filter(Boolean).join(" · ") || "—";
+              return (
+                <GlassCard key={entry.id} variant="subtle" radius="lg" padding="md">
+                  <div className="grid gap-3 sm:gap-4 items-center" style={{ gridTemplateColumns: "1fr 1fr 5rem 4rem 4rem" }}>
+                    <Link href={`/races/${entry.race.id}`} className="flex flex-col min-w-0 hover:underline">
+                      <span className="text-sm font-semibold truncate" style={{ color: "var(--text-primary)", fontFamily: "var(--font-display)" }}>
+                        {entry.race.name}
+                      </span>
+                      <span className="text-xs truncate" style={{ color: "var(--text-tertiary)" }}>{entry.race.racecourse.name}</span>
+                    </Link>
+                    <span className="text-sm truncate" style={{ color: "var(--text-secondary)" }}>{entry.jockey?.name ?? "—"}</span>
+                    <span className="text-xs truncate" style={{ color: "var(--text-secondary)" }}>{conditions}</span>
+                    <span className="text-sm text-right tabular-nums" style={{ color: "var(--text-secondary)" }}>{entry.race.distance}m</span>
+                    <span className="text-sm text-right tabular-nums" style={{ color: "var(--text-secondary)" }}>
+                      {entry.saddleNo != null ? `#${entry.saddleNo}` : "—"}
+                    </span>
+                  </div>
+                </GlassCard>
+              );
+            })}
           </div>
         </section>
       )}
 
-      {/* Form history */}
+      {/* Recent activity */}
       <section className="flex flex-col gap-4">
-        <h2 className="display-md" style={{ color: "var(--green-900)" }}>
-          Form
-        </h2>
+        <div className="flex items-baseline justify-between">
+          <h2 className="display-md" style={{ color: "var(--green-900)" }}>
+            Recent activity
+          </h2>
+          {pastEntries.length > 5 && (
+            <span className="text-xs" style={{ color: "var(--text-tertiary)" }}>
+              Last 5 of {pastEntries.length} races
+            </span>
+          )}
+        </div>
 
         {pastEntries.length === 0 ? (
           <GlassCard variant="subtle" radius="xl" padding="lg">
@@ -150,9 +185,9 @@ export default async function HorsePage({
           </GlassCard>
         ) : (
           <div className="flex flex-col gap-2">
-            <FormHeader upcoming={false} />
-            {pastEntries.map((entry) => (
-              <FormRow key={entry.id} entry={entry} upcoming={false} />
+            <FormHeader />
+            {pastEntries.slice(0, 5).map((entry) => (
+              <FormRow key={entry.id} entry={entry} />
             ))}
           </div>
         )}
@@ -165,33 +200,28 @@ export default async function HorsePage({
 
 type Entry = NonNullable<Awaited<ReturnType<typeof getHorse>>>["raceEntries"][number];
 
-function FormHeader({ upcoming }: { upcoming: boolean }) {
-  const cols = upcoming
-    ? "1fr 1fr 4rem 4rem 4rem"
-    : "6rem 1fr 1fr 4rem 4rem 4rem 3rem";
+function FormHeader() {
   return (
     <div
       className="hidden sm:grid gap-4 px-4 pb-1 text-xs font-semibold tracking-widest uppercase"
-      style={{ color: "var(--text-tertiary)", gridTemplateColumns: cols }}
+      style={{ color: "var(--text-tertiary)", gridTemplateColumns: "5rem 1fr 1fr 5rem 4rem 3rem" }}
     >
-      {!upcoming && <span>Date</span>}
+      <span>Date</span>
       <span>Race</span>
       <span>Jockey</span>
+      <span>Conditions</span>
       <span className="text-right">Dist</span>
-      <span className="text-right">Odds</span>
-      <span className="text-right">{upcoming ? "Saddle" : "Finish"}</span>
-      {!upcoming && <span className="text-right">Time</span>}
+      <span className="text-right">Pos</span>
     </div>
   );
 }
 
-function FormRow({ entry, upcoming }: { entry: Entry; upcoming: boolean }) {
+function FormRow({ entry }: { entry: Entry }) {
   const isWin = entry.finishPos === 1;
   const isPlace = entry.finishPos != null && entry.finishPos <= 3;
-
-  const cols = upcoming
-    ? "1fr 1fr 4rem 4rem 4rem"
-    : "6rem 1fr 1fr 4rem 4rem 4rem 3rem";
+  const conditions = [entry.race.raceClass, entry.race.surface ? capitalize(entry.race.surface) : null]
+    .filter(Boolean)
+    .join(" · ") || "—";
 
   return (
     <GlassCard
@@ -208,19 +238,13 @@ function FormRow({ entry, upcoming }: { entry: Entry; upcoming: boolean }) {
       )}
       <div
         className="grid gap-3 sm:gap-4 items-center"
-        style={{ gridTemplateColumns: cols }}
+        style={{ gridTemplateColumns: "5rem 1fr 1fr 5rem 4rem 3rem" }}
       >
-        {!upcoming && (
-          <span className="text-xs tabular-nums" style={{ color: "var(--text-tertiary)" }}>
-            {format(new Date(entry.race.scheduledAt), "d MMM yy")}
-          </span>
-        )}
+        <span className="text-xs tabular-nums" style={{ color: "var(--text-tertiary)" }}>
+          {format(new Date(entry.race.scheduledAt), "d MMM yy")}
+        </span>
 
-        {/* Race name + course */}
-        <Link
-          href={`/races/${entry.race.id}`}
-          className="flex flex-col min-w-0 hover:underline"
-        >
+        <Link href={`/races/${entry.race.id}`} className="flex flex-col min-w-0 hover:underline">
           <span
             className="text-sm font-semibold truncate"
             style={{ color: "var(--text-primary)", fontFamily: "var(--font-display)" }}
@@ -232,59 +256,30 @@ function FormRow({ entry, upcoming }: { entry: Entry; upcoming: boolean }) {
           </span>
         </Link>
 
-        {/* Jockey */}
         <span className="text-sm truncate" style={{ color: "var(--text-secondary)" }}>
           {entry.jockey?.name ?? "—"}
         </span>
 
-        {/* Distance */}
-        <span
-          className="text-sm text-right tabular-nums"
-          style={{ color: "var(--text-secondary)" }}
-        >
+        <span className="text-xs truncate" style={{ color: "var(--text-secondary)" }}>
+          {conditions}
+        </span>
+
+        <span className="text-sm text-right tabular-nums" style={{ color: "var(--text-secondary)" }}>
           {entry.race.distance}m
         </span>
 
-        {/* Odds */}
         <span
-          className="text-sm font-semibold text-right tabular-nums"
-          style={{ color: "var(--navy-800)" }}
+          className="text-sm font-bold text-right tabular-nums"
+          style={{
+            color: isWin
+              ? "var(--green-700)"
+              : isPlace
+              ? "var(--green-600)"
+              : "var(--text-tertiary)",
+          }}
         >
-          {entry.odds != null ? `${entry.odds.toFixed(1)}x` : "—"}
+          {entry.finishPos != null ? `${entry.finishPos}.` : "—"}
         </span>
-
-        {/* Finish pos or saddle */}
-        {upcoming ? (
-          <span
-            className="text-sm text-right tabular-nums"
-            style={{ color: "var(--text-secondary)" }}
-          >
-            {entry.saddleNo != null ? `#${entry.saddleNo}` : "—"}
-          </span>
-        ) : (
-          <span
-            className="text-sm font-bold text-right tabular-nums"
-            style={{
-              color: isWin
-                ? "var(--green-700)"
-                : isPlace
-                ? "var(--green-600)"
-                : "var(--text-tertiary)",
-            }}
-          >
-            {entry.finishPos != null ? `${entry.finishPos}.` : "—"}
-          </span>
-        )}
-
-        {/* Finish time */}
-        {!upcoming && (
-          <span
-            className="text-xs text-right tabular-nums"
-            style={{ color: "var(--text-tertiary)" }}
-          >
-            {entry.finishTime != null ? `${entry.finishTime.toFixed(1)}s` : "—"}
-          </span>
-        )}
       </div>
     </GlassCard>
   );

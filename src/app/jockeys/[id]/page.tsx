@@ -120,11 +120,18 @@ export default async function JockeyPage({
         </section>
       )}
 
-      {/* Form */}
+      {/* Recent rides */}
       <section className="flex flex-col gap-4">
-        <h2 className="display-md" style={{ color: "var(--green-900)" }}>
-          Form
-        </h2>
+        <div className="flex items-baseline justify-between">
+          <h2 className="display-md" style={{ color: "var(--green-900)" }}>
+            Recent rides
+          </h2>
+          {past.length > 10 && (
+            <span className="text-xs" style={{ color: "var(--text-tertiary)" }}>
+              Last 10 of {past.length} rides
+            </span>
+          )}
+        </div>
         {past.length === 0 ? (
           <GlassCard variant="subtle" radius="xl" padding="lg">
             <p style={{ color: "var(--text-secondary)" }}>No race history yet.</p>
@@ -132,7 +139,7 @@ export default async function JockeyPage({
         ) : (
           <div className="flex flex-col gap-2">
             <TableHeader upcoming={false} />
-            {past.map((entry) => (
+            {past.slice(0, 10).map((entry) => (
               <EntryRow key={entry.id} entry={entry} upcoming={false} />
             ))}
           </div>
@@ -150,18 +157,15 @@ function TableHeader({ upcoming }: { upcoming: boolean }) {
       className="hidden sm:grid gap-4 px-4 pb-1 text-xs font-semibold tracking-widest uppercase"
       style={{
         color: "var(--text-tertiary)",
-        gridTemplateColumns: upcoming
-          ? "1fr 1fr 4rem 4rem 4rem"
-          : "6rem 1fr 1fr 4rem 4rem 4rem 3rem",
+        gridTemplateColumns: upcoming ? "1fr 1fr 5rem 4rem 4rem" : "5rem 1fr 1fr 5rem 4rem 3rem",
       }}
     >
       {!upcoming && <span>Date</span>}
       <span>Race</span>
       <span>Horse</span>
+      <span>Conditions</span>
       <span className="text-right">Dist</span>
-      <span className="text-right">Odds</span>
-      <span className="text-right">{upcoming ? "Saddle" : "Finish"}</span>
-      {!upcoming && <span className="text-right">Time</span>}
+      <span className="text-right">{upcoming ? "Saddle" : "Pos"}</span>
     </div>
   );
 }
@@ -169,6 +173,14 @@ function TableHeader({ upcoming }: { upcoming: boolean }) {
 function EntryRow({ entry, upcoming }: { entry: Entry; upcoming: boolean }) {
   const isWin = entry.finishPos === 1;
   const isPlace = entry.finishPos != null && entry.finishPos <= 3;
+  const conditions = [
+    entry.race.raceClass,
+    entry.race.surface
+      ? entry.race.surface.charAt(0).toUpperCase() + entry.race.surface.slice(1)
+      : null,
+  ]
+    .filter(Boolean)
+    .join(" · ") || "—";
 
   return (
     <GlassCard
@@ -186,9 +198,7 @@ function EntryRow({ entry, upcoming }: { entry: Entry; upcoming: boolean }) {
       <div
         className="grid gap-3 sm:gap-4 items-center"
         style={{
-          gridTemplateColumns: upcoming
-            ? "1fr 1fr 4rem 4rem 4rem"
-            : "6rem 1fr 1fr 4rem 4rem 4rem 3rem",
+          gridTemplateColumns: upcoming ? "1fr 1fr 5rem 4rem 4rem" : "5rem 1fr 1fr 5rem 4rem 3rem",
         }}
       >
         {!upcoming && (
@@ -213,12 +223,12 @@ function EntryRow({ entry, upcoming }: { entry: Entry; upcoming: boolean }) {
           {entry.horse.name}
         </Link>
 
-        <span className="text-sm text-right tabular-nums" style={{ color: "var(--text-secondary)" }}>
-          {entry.race.distance}m
+        <span className="text-xs truncate" style={{ color: "var(--text-secondary)" }}>
+          {conditions}
         </span>
 
-        <span className="text-sm font-semibold text-right tabular-nums" style={{ color: "var(--navy-800)" }}>
-          {entry.odds != null ? `${entry.odds.toFixed(1)}x` : "—"}
+        <span className="text-sm text-right tabular-nums" style={{ color: "var(--text-secondary)" }}>
+          {entry.race.distance}m
         </span>
 
         {upcoming ? (
@@ -229,20 +239,10 @@ function EntryRow({ entry, upcoming }: { entry: Entry; upcoming: boolean }) {
           <span
             className="text-sm font-bold text-right tabular-nums"
             style={{
-              color: isWin
-                ? "var(--green-700)"
-                : isPlace
-                ? "var(--green-600)"
-                : "var(--text-tertiary)",
+              color: isWin ? "var(--green-700)" : isPlace ? "var(--green-600)" : "var(--text-tertiary)",
             }}
           >
             {entry.finishPos != null ? `${entry.finishPos}.` : "—"}
-          </span>
-        )}
-
-        {!upcoming && (
-          <span className="text-xs text-right tabular-nums" style={{ color: "var(--text-tertiary)" }}>
-            {entry.finishTime != null ? `${entry.finishTime.toFixed(1)}s` : "—"}
           </span>
         )}
       </div>

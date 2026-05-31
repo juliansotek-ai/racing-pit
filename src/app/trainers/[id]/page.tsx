@@ -45,6 +45,25 @@ function computeStats(horses: Horse[]) {
   };
 }
 
+function computeTopPerformers(horses: Horse[]) {
+  const twoYearsAgo = new Date();
+  twoYearsAgo.setFullYear(twoYearsAgo.getFullYear() - 2);
+
+  return horses
+    .map((horse) => {
+      const recent = horse.raceEntries.filter(
+        (e) =>
+          e.race.status === "COMPLETED" &&
+          new Date(e.race.scheduledAt) >= twoYearsAgo
+      );
+      const wins = recent.filter((e) => e.finishPos === 1).length;
+      const places = recent.filter((e) => e.finishPos != null && e.finishPos <= 3).length;
+      return { horse, wins, places, runs: recent.length };
+    })
+    .filter((h) => h.runs > 0)
+    .sort((a, b) => b.wins - a.wins || b.places - a.places || b.runs - a.runs);
+}
+
 export default async function TrainerPage({
   params,
 }: {
@@ -55,6 +74,7 @@ export default async function TrainerPage({
   if (!trainer) notFound();
 
   const stats = computeStats(trainer.horses);
+  const topPerformers = computeTopPerformers(trainer.horses);
 
   // Flatten all entries across horses, inject horse reference, sort by date
   const allEntries: Entry[] = trainer.horses
@@ -114,6 +134,91 @@ export default async function TrainerPage({
           />
         </div>
       </GlassCard>
+
+      {/* Top performers (last 2 years) */}
+      {topPerformers.length > 0 && (
+        <section className="flex flex-col gap-4">
+          <h2 className="display-md" style={{ color: "var(--green-900)" }}>
+            Top performers <span style={{ color: "var(--text-tertiary)", fontFamily: "var(--font-body)", fontSize: "0.875rem", fontWeight: 400 }}>last 2 years</span>
+          </h2>
+          <div className="flex flex-col gap-2">
+            <div
+              className="hidden sm:grid gap-4 px-4 pb-1 text-xs font-semibold tracking-widest uppercase"
+              style={{ color: "var(--text-tertiary)", gridTemplateColumns: "2rem 1fr 3rem 3rem 3rem 4rem" }}
+            >
+              <span>#</span>
+              <span>Horse</span>
+              <span className="text-right">Wins</span>
+              <span className="text-right">Places</span>
+              <span className="text-right">Runs</span>
+              <span className="text-right">Win %</span>
+            </div>
+            {topPerformers.map(({ horse, wins, places, runs }, i) => {
+              const winRate = Math.round((wins / runs) * 100);
+              const isTop = i === 0 && wins > 0;
+              return (
+                <Link key={horse.id} href={`/horses/${horse.id}`} className="block group">
+                  <GlassCard
+                    variant={isTop ? "default" : "subtle"}
+                    radius="lg"
+                    padding="md"
+                    className="relative overflow-hidden transition-shadow duration-200 group-hover:shadow-[var(--glass-shadow-md)]"
+                  >
+                    {isTop && (
+                      <div
+                        className="absolute inset-y-0 left-0 w-1 rounded-l-lg"
+                        style={{ background: "var(--green-500)" }}
+                      />
+                    )}
+                    <div
+                      className="grid gap-3 sm:gap-4 items-center"
+                      style={{ gridTemplateColumns: "2rem 1fr 3rem 3rem 3rem 4rem" }}
+                    >
+                      <span
+                        className="text-sm font-bold tabular-nums"
+                        style={{ color: isTop ? "var(--green-600)" : "var(--text-tertiary)" }}
+                      >
+                        {i + 1}
+                      </span>
+                      <div className="flex flex-col min-w-0">
+                        <span
+                          className="text-sm font-semibold truncate"
+                          style={{ color: "var(--text-primary)", fontFamily: "var(--font-display)" }}
+                        >
+                          {horse.name}
+                        </span>
+                        {horse.gender && (
+                          <span className="text-xs capitalize" style={{ color: "var(--text-tertiary)" }}>
+                            {[horse.gender, horse.color].filter(Boolean).join(" · ")}
+                          </span>
+                        )}
+                      </div>
+                      <span
+                        className="text-sm font-bold text-right tabular-nums"
+                        style={{ color: wins > 0 ? "var(--green-700)" : "var(--text-tertiary)" }}
+                      >
+                        {wins}
+                      </span>
+                      <span className="text-sm text-right tabular-nums" style={{ color: "var(--text-secondary)" }}>
+                        {places}
+                      </span>
+                      <span className="text-sm text-right tabular-nums" style={{ color: "var(--text-secondary)" }}>
+                        {runs}
+                      </span>
+                      <span
+                        className="text-sm font-semibold text-right tabular-nums"
+                        style={{ color: winRate >= 20 ? "var(--green-600)" : "var(--text-secondary)" }}
+                      >
+                        {winRate}%
+                      </span>
+                    </div>
+                  </GlassCard>
+                </Link>
+              );
+            })}
+          </div>
+        </section>
+      )}
 
       {/* Horses roster */}
       <section className="flex flex-col gap-4">
