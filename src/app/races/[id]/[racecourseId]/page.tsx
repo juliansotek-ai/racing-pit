@@ -70,13 +70,12 @@ function EntryRow({ entry, isCompleted }: { entry: Entry; isCompleted: boolean }
   const isPlaced = entry.finishPos != null && entry.finishPos <= 3;
   return (
     <div
-      className="relative grid items-center gap-3 px-4 py-2.5"
-      style={{
-        gridTemplateColumns: isCompleted
-          ? "2rem 2rem 1fr 1fr 1fr 4rem"
-          : "2rem 1fr 1fr 1fr 4rem",
-        borderTop: "1px solid var(--glass-border-subtle)",
-      }}
+      className={`relative grid items-center gap-3 px-4 py-2.5 ${
+        isCompleted
+          ? "grid-cols-[2rem_2rem_1fr_4rem] sm:grid-cols-[2rem_2rem_1fr_1fr_1fr_4rem]"
+          : "grid-cols-[2rem_1fr_4rem] sm:grid-cols-[2rem_1fr_1fr_1fr_4rem]"
+      }`}
+      style={{ borderTop: "1px solid var(--glass-border-subtle)" }}
     >
       {isWinner && (
         <div
@@ -115,14 +114,33 @@ function EntryRow({ entry, isCompleted }: { entry: Entry; isCompleted: boolean }
         >
           {entry.horse.name}
         </Link>
+        {/* Jockey + Trainer stacked on mobile */}
+        <div className="flex flex-col sm:hidden">
+          {entry.jockey && (
+            <Link href={`/jockeys/${entry.jockey.id}`} className="text-xs truncate hover:underline" style={{ color: "var(--text-secondary)" }}>
+              {entry.jockey.name}
+            </Link>
+          )}
+          {entry.horse.trainer && (
+            <Link href={`/trainers/${entry.horse.trainer.id}`} className="text-xs truncate hover:underline" style={{ color: "var(--text-tertiary)" }}>
+              {entry.horse.trainer.name}
+            </Link>
+          )}
+          {entry.horse.gender && (
+            <span className="text-xs capitalize" style={{ color: "var(--text-tertiary)" }}>
+              {entry.horse.gender}
+            </span>
+          )}
+        </div>
+        {/* Gender only on desktop (jockey/trainer have their own columns) */}
         {entry.horse.gender && (
-          <span className="text-xs capitalize" style={{ color: "var(--text-tertiary)" }}>
+          <span className="text-xs capitalize hidden sm:block" style={{ color: "var(--text-tertiary)" }}>
             {entry.horse.gender}
           </span>
         )}
       </div>
 
-      {/* Jockey */}
+      {/* Jockey — desktop only */}
       <span className="text-sm truncate hidden sm:block" style={{ color: "var(--text-secondary)" }}>
         {entry.jockey ? (
           <Link href={`/jockeys/${entry.jockey.id}`} className="hover:underline">
@@ -131,7 +149,7 @@ function EntryRow({ entry, isCompleted }: { entry: Entry; isCompleted: boolean }
         ) : "—"}
       </span>
 
-      {/* Trainer */}
+      {/* Trainer — desktop only */}
       <span className="text-sm truncate hidden sm:block" style={{ color: "var(--text-secondary)" }}>
         {entry.horse.trainer ? (
           <Link href={`/trainers/${entry.horse.trainer.id}`} className="hover:underline">
@@ -220,14 +238,15 @@ function RaceSection({ race, raceNumber }: { race: Race; raceNumber: number }) {
       {race.entries.length > 0 && (
         <>
           <div
-            className="grid gap-3 px-4 py-1.5 text-[10px] font-semibold tracking-widest uppercase"
+            className={`grid gap-3 px-4 py-1.5 text-[10px] font-semibold tracking-widest uppercase ${
+              isCompleted
+                ? "grid-cols-[2rem_2rem_1fr_4rem] sm:grid-cols-[2rem_2rem_1fr_1fr_1fr_4rem]"
+                : "grid-cols-[2rem_1fr_4rem] sm:grid-cols-[2rem_1fr_1fr_1fr_4rem]"
+            }`}
             style={{
               color: "var(--text-tertiary)",
               background: "var(--glass-bg-subtle, rgba(0,0,0,0.02))",
               borderTop: "1px solid var(--glass-border-subtle)",
-              gridTemplateColumns: isCompleted
-                ? "2rem 2rem 1fr 1fr 1fr 4rem"
-                : "2rem 1fr 1fr 1fr 4rem",
             }}
           >
             <span>#</span>
@@ -256,9 +275,9 @@ function RaceSection({ race, raceNumber }: { race: Race; raceNumber: number }) {
 export default async function MeetingPage({
   params,
 }: {
-  params: Promise<{ date: string; racecourseId: string }>;
+  params: Promise<{ id: string; racecourseId: string }>;
 }) {
-  const { date, racecourseId } = await params;
+  const { id: date, racecourseId } = await params;
   const races = await getMeeting(date, racecourseId);
   if (!races) notFound();
 
