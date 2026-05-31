@@ -35,17 +35,19 @@ export default async function RacePage({
   if (!race) notFound();
 
   const isCompleted = race.status === "COMPLETED";
+  const meetingDate = new Date(race.scheduledAt).toISOString().slice(0, 10);
+  const meetingHref = `/races/${meetingDate}/${race.racecourseId}`;
 
   return (
     <main className="flex flex-col min-h-screen px-6 py-12 max-w-5xl mx-auto gap-8">
 
       {/* Back */}
       <Link
-        href="/"
+        href={meetingHref}
         className="flex items-center gap-1.5 text-sm w-fit transition-opacity hover:opacity-70"
         style={{ color: "var(--text-secondary)" }}
       >
-        ← Back to calendar
+        ← Back to meeting
       </Link>
 
       {/* Header */}
