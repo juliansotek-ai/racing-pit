@@ -307,14 +307,38 @@ async function persistRace(
   return persisted;
 }
 
-// ─── Public entry point ───────────────────────────────────────────────────────
+// ─── Public entry points ──────────────────────────────────────────────────────
 
+/** Scrape all recent result days (~10 day backfill). Used by daily 6am cron. */
 export async function scrapeResults(): Promise<{ races: number; entries: number; skipped: number }> {
+  return scrapeResultsForDates();
+}
+
+/**
+ * Scrape only today's results. Used by the every-10-min race-day cron.
+ * Fetches ~10 URLs vs ~91 for the full history run.
+ */
+export async function scrapeResultsToday(): Promise<{ races: number; entries: number; skipped: number }> {
+  const today = new Date().toISOString().slice(0, 10);
+  return scrapeResultsForDates(today);
+}
+
+async function scrapeResultsForDates(
+  dateFilter?: string,
+): Promise<{ races: number; entries: number; skipped: number }> {
   let totalRaces = 0;
   let totalEntries = 0;
   let skipped = 0;
 
-  const meetings = await fetchResultMeetings();
+  const allMeetings = await fetchResultMeetings();
+  const meetings = dateFilter
+    ? allMeetings.filter(m => m.datePart === dateFilter)
+    : allMeetings;
+
+  if (dateFilter && meetings.length === 0) {
+    console.log(`scrapeResultsForDates: no races found for ${dateFilter}`);
+    return { races: 0, entries: 0, skipped: 0 };
+  }
 
   for (const meeting of meetings) {
     const venueName = VENUE_NAMES[meeting.ortCode] ?? meeting.ortCode;
@@ -356,7 +380,7 @@ export async function scrapeResults(): Promise<{ races: number; entries: number;
     await new Promise(r => setTimeout(r, 500));
   }
 
-  console.log(`scrapeResults: races=${totalRaces} entries=${totalEntries} skipped=${skipped}`);
+  console.log(`scrapeResultsForDates(${dateFilter ?? "all"}): races=${totalRaces} entries=${totalEntries} skipped=${skipped}`);
   return { races: totalRaces, entries: totalEntries, skipped };
 }
 
