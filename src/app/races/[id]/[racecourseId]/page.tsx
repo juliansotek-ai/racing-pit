@@ -40,6 +40,11 @@ type Races = NonNullable<Awaited<ReturnType<typeof getMeeting>>>;
 type Race = Races[number];
 type Entry = Race["entries"][number];
 
+function formatRaceTime(date: Date | string): string {
+  const d = new Date(date);
+  return d.getTime() % 86400000 === 0 ? "N/A" : format(d, "HH:mm");
+}
+
 function getMeetingStatus(races: Race[]): string {
   const statuses = races.map((r) => r.status);
   if (statuses.every((s) => s === "COMPLETED")) return "COMPLETED";
@@ -200,7 +205,7 @@ function RaceSection({ race, raceNumber }: { race: Race; raceNumber: number }) {
               className="text-sm font-semibold tabular-nums"
               style={{ color: "var(--green-700)" }}
             >
-              {format(new Date(race.scheduledAt), "HH:mm")}
+              {formatRaceTime(race.scheduledAt)}
             </span>
           </div>
           <h3
@@ -341,7 +346,7 @@ export default async function MeetingPage({
                 First off
               </span>
               <span className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
-                {format(new Date(firstStart), "HH:mm")}
+                {formatRaceTime(firstStart)}
               </span>
             </div>
             <div className="flex flex-col gap-0.5">
@@ -349,7 +354,7 @@ export default async function MeetingPage({
                 Last off
               </span>
               <span className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
-                {format(new Date(races[races.length - 1].scheduledAt), "HH:mm")}
+                {formatRaceTime(races[races.length - 1].scheduledAt)}
               </span>
             </div>
             {totalRunners > 0 && (

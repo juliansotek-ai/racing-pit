@@ -16,6 +16,11 @@ type Props = {
   };
 };
 
+function formatRaceTime(date: Date | string): string {
+  const d = new Date(date);
+  return d.getTime() % 86400000 === 0 ? "N/A" : format(d, "HH:mm");
+}
+
 export function RaceCard({ race }: Props) {
   const isCompleted = race.status === "COMPLETED";
 
@@ -44,7 +49,7 @@ export function RaceCard({ race }: Props) {
         </div>
 
         <div className="flex flex-wrap gap-x-4 gap-y-1">
-          <Stat label="Time" value={format(new Date(race.scheduledAt), "HH:mm")} />
+          <Stat label="Time" value={formatRaceTime(race.scheduledAt)} />
           <Stat label="Distance" value={`${race.distance}m`} />
           {race.raceClass && <Stat label="Class" value={race.raceClass} accent />}
           {race.prize != null && (

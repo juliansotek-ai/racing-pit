@@ -8,6 +8,10 @@ import { auth } from "@/lib/auth";
 
 type Meeting = Awaited<ReturnType<typeof getUpcomingMeetings>>[number];
 
+function formatRaceTime(date: Date): string {
+  return date.getTime() % 86400000 === 0 ? "N/A" : format(date, "HH:mm");
+}
+
 function MeetingCard({ meeting }: { meeting: Meeting }) {
   return (
     <Link href={`/races/${meeting.date}/${meeting.racecourseId}`} className="block group">
@@ -30,7 +34,7 @@ function MeetingCard({ meeting }: { meeting: Meeting }) {
         </div>
         <div className="flex flex-wrap gap-x-4 gap-y-1">
           <Stat label="Races" value={String(meeting.raceCount)} />
-          <Stat label="First off" value={format(meeting.firstStart, "HH:mm")} />
+          <Stat label="First off" value={formatRaceTime(meeting.firstStart)} />
           {meeting.totalRunners > 0 && (
             <Stat label="Runners" value={String(meeting.totalRunners)} />
           )}

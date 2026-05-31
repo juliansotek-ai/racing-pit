@@ -10,6 +10,7 @@
 
 import * as cheerio from "cheerio";
 import { prisma } from "@/lib/prisma";
+import { canonicalPersonKey, isAbbreviatedName } from "@/lib/utils";
 
 const BASE_URL = "https://www.galopp-statistik.de";
 const DEBUG = process.env.DEBUG_SCRAPER === "1";
@@ -100,23 +101,47 @@ async function upsertRacecourse(ortCode: string, displayName: string): Promise<s
 }
 
 async function upsertTrainer(name: string): Promise<string> {
-  const externalId = `gs-trainer-${name.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "")}`;
+  const canonicalId = `gs-trainer-${canonicalPersonKey(name)}`;
+  const legacyId = `gs-trainer-${name.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "")}`;
   const countryId = await getGermanyId();
-  const t = await prisma.trainer.upsert({
-    where: { externalId },
-    create: { externalId, name, countryId },
-    update: { name },
+
+  const existing = await prisma.trainer.findFirst({
+    where: { externalId: { in: [...new Set([canonicalId, legacyId])] } },
+  });
+  if (existing) {
+    const patch: { externalId?: string; name?: string } = {};
+    if (existing.externalId !== canonicalId) patch.externalId = canonicalId;
+    if (!isAbbreviatedName(name) && name !== existing.name) patch.name = name;
+    if (Object.keys(patch).length > 0)
+      await prisma.trainer.update({ where: { id: existing.id }, data: patch });
+    return existing.id;
+  }
+
+  const t = await prisma.trainer.create({
+    data: { externalId: canonicalId, name, countryId },
   });
   return t.id;
 }
 
 async function upsertJockey(name: string): Promise<string> {
-  const externalId = `gs-jockey-${name.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "")}`;
+  const canonicalId = `gs-jockey-${canonicalPersonKey(name)}`;
+  const legacyId = `gs-jockey-${name.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "")}`;
   const countryId = await getGermanyId();
-  const j = await prisma.jockey.upsert({
-    where: { externalId },
-    create: { externalId, name, countryId },
-    update: { name },
+
+  const existing = await prisma.jockey.findFirst({
+    where: { externalId: { in: [...new Set([canonicalId, legacyId])] } },
+  });
+  if (existing) {
+    const patch: { externalId?: string; name?: string } = {};
+    if (existing.externalId !== canonicalId) patch.externalId = canonicalId;
+    if (!isAbbreviatedName(name) && name !== existing.name) patch.name = name;
+    if (Object.keys(patch).length > 0)
+      await prisma.jockey.update({ where: { id: existing.id }, data: patch });
+    return existing.id;
+  }
+
+  const j = await prisma.jockey.create({
+    data: { externalId: canonicalId, name, countryId },
   });
   return j.id;
 }

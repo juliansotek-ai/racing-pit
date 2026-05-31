@@ -1,10 +1,29 @@
+export const dynamic = "force-dynamic";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { format } from "date-fns";
 import { prisma } from "@/lib/prisma";
+import { auth } from "@/lib/auth";
 import { GlassCard } from "@/components/ui";
 import { FavoriteButton } from "@/components/FavoriteButton";
 import { NoteEditor } from "@/components/NoteEditor";
+
+async function getTrainerBets(userId: string, trainerId: string) {
+  return prisma.bet.findMany({
+    where: { userId, raceEntry: { horse: { trainerId } } },
+    include: {
+      raceEntry: {
+        include: {
+          race: { include: { racecourse: true } },
+          horse: true,
+        },
+      },
+    },
+    orderBy: { createdAt: "desc" },
+  });
+}
+
+type TrainerBet = Awaited<ReturnType<typeof getTrainerBets>>[number];
 
 async function getTrainer(id: string) {
   return prisma.trainer.findUnique({
@@ -70,8 +89,10 @@ export default async function TrainerPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const trainer = await getTrainer(id);
+  const [trainer, session] = await Promise.all([getTrainer(id), auth()]);
   if (!trainer) notFound();
+
+  const bets = session?.user?.id ? await getTrainerBets(session.user.id, id) : [];
 
   const stats = computeStats(trainer.horses);
   const topPerformers = computeTopPerformers(trainer.horses);
@@ -170,8 +191,39 @@ export default async function TrainerPage({
                         style={{ background: "var(--green-500)" }}
                       />
                     )}
+
+                    {/* Mobile */}
+                    <div className="sm:hidden flex items-center gap-3">
+                      <span
+                        className="text-sm font-bold tabular-nums w-5 shrink-0"
+                        style={{ color: isTop ? "var(--green-600)" : "var(--text-tertiary)" }}
+                      >
+                        {i + 1}
+                      </span>
+                      <div className="flex flex-col min-w-0 flex-1">
+                        <span className="text-sm font-semibold truncate" style={{ color: "var(--text-primary)", fontFamily: "var(--font-display)" }}>
+                          {horse.name}
+                        </span>
+                        {horse.gender && (
+                          <span className="text-xs capitalize" style={{ color: "var(--text-tertiary)" }}>
+                            {[horse.gender, horse.color].filter(Boolean).join(" · ")}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex gap-3 shrink-0 text-sm tabular-nums">
+                        <span className="font-bold" style={{ color: wins > 0 ? "var(--green-700)" : "var(--text-tertiary)" }}>
+                          {wins}W
+                        </span>
+                        <span style={{ color: "var(--text-secondary)" }}>{places}P</span>
+                        <span className="font-semibold" style={{ color: winRate >= 20 ? "var(--green-600)" : "var(--text-secondary)" }}>
+                          {winRate}%
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Desktop */}
                     <div
-                      className="grid gap-3 sm:gap-4 items-center"
+                      className="hidden sm:grid gap-4 items-center"
                       style={{ gridTemplateColumns: "2rem 1fr 3rem 3rem 3rem 4rem" }}
                     >
                       <span
@@ -314,8 +366,77 @@ export default async function TrainerPage({
         )}
       </section>
 
+      {/* My bets */}
+      {session?.user?.id && (
+        <section className="flex flex-col gap-4">
+          <h2 className="display-md" style={{ color: "var(--green-900)" }}>
+            My bets
+          </h2>
+          {bets.length === 0 ? (
+            <GlassCard variant="subtle" radius="xl" padding="lg">
+              <p style={{ color: "var(--text-secondary)" }}>No bets placed on horses from this trainer.</p>
+            </GlassCard>
+          ) : (
+            <div className="flex flex-col gap-2">
+              {bets.map((bet) => <TrainerBetRow key={bet.id} bet={bet} />)}
+            </div>
+          )}
+        </section>
+      )}
+
       <NoteEditor trainerId={trainer.id} />
     </main>
+  );
+}
+
+function TrainerBetRow({ bet }: { bet: TrainerBet }) {
+  const entry = bet.raceEntry;
+  const isWon = bet.result === "WON";
+  const isLost = bet.result === "LOST";
+  const isPending = bet.result == null;
+
+  return (
+    <GlassCard variant={isWon ? "default" : "subtle"} radius="lg" padding="md" className="relative overflow-hidden">
+      {isWon && <div className="absolute inset-y-0 left-0 w-1 rounded-l-lg" style={{ background: "var(--green-500)" }} />}
+      {isLost && <div className="absolute inset-y-0 left-0 w-1 rounded-l-lg" style={{ background: "#EF4444" }} />}
+
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div className="flex flex-col gap-0.5">
+          <div className="flex items-center gap-2 flex-wrap">
+            <Link href={`/horses/${entry.horse.id}`} className="text-sm font-semibold hover:underline" style={{ color: "var(--text-primary)", fontFamily: "var(--font-display)" }}>
+              {entry.horse.name}
+            </Link>
+            <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: "var(--gray-100)", color: "var(--text-secondary)" }}>
+              {bet.betType === "EACH_WAY" ? "E/W" : bet.betType}
+            </span>
+          </div>
+          <Link href={`/races/${entry.race.id}`} className="text-xs hover:underline" style={{ color: "var(--text-tertiary)" }}>
+            {entry.race.name} · {entry.race.racecourse.name} · {format(new Date(entry.race.scheduledAt), "d MMM yyyy")}
+          </Link>
+        </div>
+
+        <div className="flex items-center gap-4">
+          <div className="flex flex-col items-end gap-0">
+            <span className="text-xs" style={{ color: "var(--text-tertiary)" }}>Stake</span>
+            <span className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>€{bet.stake.toFixed(2)}</span>
+          </div>
+          <div className="flex flex-col items-end gap-0">
+            <span className="text-xs" style={{ color: "var(--text-tertiary)" }}>Odds</span>
+            <span className="text-sm font-semibold" style={{ color: "var(--navy-800)" }}>{bet.oddsAtBet.toFixed(1)}x</span>
+          </div>
+          <div className="flex flex-col items-end gap-0">
+            <span className="text-xs" style={{ color: "var(--text-tertiary)" }}>Result</span>
+            {isPending ? (
+              <span className="text-xs font-medium px-2 py-0.5 rounded-full" style={{ background: "var(--green-50)", color: "var(--green-700)" }}>Pending</span>
+            ) : (
+              <span className="text-sm font-bold" style={{ color: isWon ? "var(--green-700)" : "#EF4444" }}>
+                {isWon && bet.payout != null ? `+€${(bet.payout - bet.stake).toFixed(2)}` : bet.result}
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+    </GlassCard>
   );
 }
 
@@ -344,6 +465,7 @@ function TableHeader({ upcoming }: { upcoming: boolean }) {
 function EntryRow({ entry, upcoming }: { entry: Entry; upcoming: boolean }) {
   const isWin = entry.finishPos === 1;
   const isPlace = entry.finishPos != null && entry.finishPos <= 3;
+  const posColor = isWin ? "var(--green-700)" : isPlace ? "var(--green-600)" : "var(--text-tertiary)";
 
   return (
     <GlassCard
@@ -358,8 +480,55 @@ function EntryRow({ entry, upcoming }: { entry: Entry; upcoming: boolean }) {
           style={{ background: "var(--green-500)" }}
         />
       )}
+
+      {/* Mobile */}
+      <div className="sm:hidden flex flex-col gap-2">
+        {!upcoming && (
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-xs tabular-nums" style={{ color: "var(--text-tertiary)" }}>
+              {format(new Date(entry.race.scheduledAt), "d MMM yy")}
+            </span>
+            <span className="text-sm font-bold tabular-nums" style={{ color: posColor }}>
+              {entry.finishPos != null ? `${entry.finishPos}.` : "—"}
+            </span>
+          </div>
+        )}
+        <Link href={`/races/${entry.race.id}`} className="flex flex-col min-w-0 hover:underline">
+          <span className="text-sm font-semibold" style={{ color: "var(--text-primary)", fontFamily: "var(--font-display)" }}>
+            {entry.race.name}
+          </span>
+          <span className="text-xs" style={{ color: "var(--text-tertiary)" }}>
+            {entry.race.racecourse.name}
+          </span>
+        </Link>
+        <div className="flex flex-wrap gap-x-2 gap-y-0.5 text-xs" style={{ color: "var(--text-secondary)" }}>
+          <Link href={`/horses/${entry.horse.id}`} className="hover:underline">{entry.horse.name}</Link>
+          {entry.jockey && (
+            <>
+              <span style={{ color: "var(--text-tertiary)" }}>·</span>
+              <span>{entry.jockey.name}</span>
+            </>
+          )}
+          <span style={{ color: "var(--text-tertiary)" }}>·</span>
+          <span>{entry.race.distance}m</span>
+          {upcoming && entry.odds != null && (
+            <>
+              <span style={{ color: "var(--text-tertiary)" }}>·</span>
+              <span style={{ color: "var(--navy-800)" }}>{entry.odds.toFixed(1)}x</span>
+            </>
+          )}
+          {!upcoming && entry.finishTime != null && (
+            <>
+              <span style={{ color: "var(--text-tertiary)" }}>·</span>
+              <span>{entry.finishTime.toFixed(1)}s</span>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Desktop */}
       <div
-        className="grid gap-3 sm:gap-4 items-center"
+        className="hidden sm:grid gap-4 items-center"
         style={{
           gridTemplateColumns: upcoming
             ? "1fr 1fr 1fr 4rem 4rem"
@@ -401,16 +570,7 @@ function EntryRow({ entry, upcoming }: { entry: Entry; upcoming: boolean }) {
             {entry.odds != null ? `${entry.odds.toFixed(1)}x` : "—"}
           </span>
         ) : (
-          <span
-            className="text-sm font-bold text-right tabular-nums"
-            style={{
-              color: isWin
-                ? "var(--green-700)"
-                : isPlace
-                ? "var(--green-600)"
-                : "var(--text-tertiary)",
-            }}
-          >
+          <span className="text-sm font-bold text-right tabular-nums" style={{ color: posColor }}>
             {entry.finishPos != null ? `${entry.finishPos}.` : "—"}
           </span>
         )}

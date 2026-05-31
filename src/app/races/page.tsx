@@ -94,6 +94,10 @@ function Stat({ label, value }: { label: string; value: string }) {
   );
 }
 
+function formatRaceTime(date: Date): string {
+  return date.getTime() % 86400000 === 0 ? "N/A" : format(date, "HH:mm");
+}
+
 function MeetingCard({ meeting }: { meeting: Meeting }) {
   const totalRunners = meeting.races.reduce((sum, r) => sum + r.entries.length, 0);
   return (
@@ -121,7 +125,7 @@ function MeetingCard({ meeting }: { meeting: Meeting }) {
 
         <div className="flex flex-wrap gap-x-4 gap-y-1">
           <Stat label="Races" value={String(meeting.races.length)} />
-          <Stat label="First off" value={format(meeting.firstStart, "HH:mm")} />
+          <Stat label="First off" value={formatRaceTime(meeting.firstStart)} />
           {totalRunners > 0 && <Stat label="Runners" value={String(totalRunners)} />}
         </div>
       </GlassCard>
