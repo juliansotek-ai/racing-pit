@@ -2,8 +2,10 @@ export const dynamic = "force-dynamic";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { GlassCard } from "@/components/ui";
+import { auth } from "@/lib/auth";
+import { HorsesTable, type HorseRow } from "@/components/HorsesTable";
 
-async function getHorses() {
+async function getAllHorses(): Promise<HorseRow[]> {
   const horses = await prisma.horse.findMany({
     include: {
       trainer: { select: { id: true, name: true } },
@@ -18,6 +20,7 @@ async function getHorses() {
 
   return horses.map((h) => {
     const positions = h.raceEntries.map((e) => e.finishPos!);
+    const wins = positions.filter((p) => p === 1).length;
     return {
       id: h.id,
       name: h.name,
@@ -25,7 +28,7 @@ async function getHorses() {
       country: h.country,
       trainer: h.trainer,
       totalRaces: positions.length,
-      wins: positions.filter((p) => p === 1).length,
+      wins,
       avgPos:
         positions.length > 0
           ? (positions.reduce((a, b) => a + b, 0) / positions.length).toFixed(1)
@@ -34,8 +37,78 @@ async function getHorses() {
   });
 }
 
+async function getFavoriteHorses(userId: string): Promise<HorseRow[]> {
+  const favorites = await prisma.favorite.findMany({
+    where: { userId, horseId: { not: null } },
+    include: {
+      horse: {
+        include: {
+          trainer: { select: { id: true, name: true } },
+          country: { select: { name: true } },
+          raceEntries: {
+            where: { finishPos: { not: null } },
+            select: { finishPos: true },
+          },
+        },
+      },
+    },
+  });
+
+  const horseIds = favorites.map((f) => f.horseId!);
+  if (horseIds.length === 0) return [];
+
+  const bets = await prisma.bet.findMany({
+    where: { userId, raceEntry: { horseId: { in: horseIds } } },
+    include: { raceEntry: { select: { horseId: true } } },
+  });
+
+  const betsByHorse: Record<string, { total: number; settledStake: number; settledPayout: number }> = {};
+  for (const bet of bets) {
+    const id = bet.raceEntry.horseId;
+    if (!betsByHorse[id]) betsByHorse[id] = { total: 0, settledStake: 0, settledPayout: 0 };
+    betsByHorse[id].total++;
+    if (bet.result !== null) {
+      betsByHorse[id].settledStake += bet.stake;
+      betsByHorse[id].settledPayout += bet.payout ?? 0;
+    }
+  }
+
+  return favorites
+    .filter((f) => f.horse != null)
+    .map((f) => {
+      const h = f.horse!;
+      const positions = h.raceEntries.map((e) => e.finishPos!);
+      const wins = positions.filter((p) => p === 1).length;
+      const stats = betsByHorse[h.id];
+      return {
+        id: h.id,
+        name: h.name,
+        gender: h.gender,
+        country: h.country,
+        trainer: h.trainer,
+        totalRaces: positions.length,
+        wins,
+        avgPos:
+          positions.length > 0
+            ? (positions.reduce((a, b) => a + b, 0) / positions.length).toFixed(1)
+            : null,
+        betsPlaced: stats?.total ?? 0,
+        roi:
+          stats && stats.settledStake > 0
+            ? ((stats.settledPayout - stats.settledStake) / stats.settledStake) * 100
+            : null,
+      };
+    })
+    .sort((a, b) => b.wins - a.wins);
+}
+
 export default async function HorsesPage() {
-  const horses = await getHorses();
+  const session = await auth();
+
+  const [horses, favoriteHorses] = await Promise.all([
+    getAllHorses(),
+    session?.user?.id ? getFavoriteHorses(session.user.id) : Promise.resolve(null),
+  ]);
 
   return (
     <main className="max-w-6xl mx-auto px-4 sm:px-6 py-10 flex flex-col gap-8">
@@ -56,84 +129,23 @@ export default async function HorsesPage() {
         </Link>
       </div>
 
+      {favoriteHorses !== null && (
+        <div className="flex flex-col gap-3">
+          <h2 className="text-xs font-semibold tracking-widest uppercase" style={{ color: "var(--text-secondary)" }}>
+            ★ Followed Horses
+          </h2>
+          <GlassCard variant="default" radius="xl" padding="md">
+            <HorsesTable
+              horses={favoriteHorses}
+              showBetStats
+              emptyMessage="You haven't followed any horses yet. Click Follow on a horse's page to track it here."
+            />
+          </GlassCard>
+        </div>
+      )}
+
       <GlassCard variant="default" radius="xl" padding="md">
-        {horses.length === 0 ? (
-          <p className="py-6 text-center text-sm" style={{ color: "var(--text-tertiary)" }}>
-            No horses registered yet.
-          </p>
-        ) : (
-          <div className="overflow-x-auto -mx-6 px-6">
-            <table className="w-full text-sm border-collapse">
-              <thead>
-                <tr>
-                  <th className="text-left py-2 pr-4 text-[10px] font-semibold tracking-widest uppercase" style={{ color: "var(--text-tertiary)" }}>
-                    Horse
-                  </th>
-                  <th className="text-left py-2 pr-4 text-[10px] font-semibold tracking-widest uppercase hidden sm:table-cell" style={{ color: "var(--text-tertiary)" }}>
-                    Trainer
-                  </th>
-                  <th className="text-right py-2 pl-3 text-[10px] font-semibold tracking-widest uppercase" style={{ color: "var(--text-tertiary)" }}>
-                    Races
-                  </th>
-                  <th className="text-right py-2 pl-3 text-[10px] font-semibold tracking-widest uppercase" style={{ color: "var(--text-tertiary)" }}>
-                    Wins
-                  </th>
-                  <th className="text-right py-2 pl-3 text-[10px] font-semibold tracking-widest uppercase" style={{ color: "var(--text-tertiary)" }}>
-                    Avg
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {horses.map((horse) => (
-                  <tr
-                    key={horse.id}
-                    className="transition-colors hover:bg-black/[0.025] group"
-                    style={{ borderTop: "1px solid var(--glass-border-subtle)" }}
-                  >
-                    <td className="py-3 pr-4">
-                      <Link
-                        href={`/horses/${horse.id}`}
-                        className="flex flex-col group-hover:underline underline-offset-2 decoration-1"
-                      >
-                        <span className="font-display font-medium" style={{ color: "var(--text-primary)" }}>
-                          {horse.name}
-                        </span>
-                        <span className="text-xs" style={{ color: "var(--text-tertiary)" }}>
-                          {horse.country.name}{horse.gender ? ` · ${horse.gender}` : ""}
-                        </span>
-                      </Link>
-                    </td>
-                    <td className="py-3 pr-4 hidden sm:table-cell">
-                      {horse.trainer ? (
-                        <Link
-                          href={`/trainers/${horse.trainer.id}`}
-                          className="text-sm hover:underline underline-offset-2"
-                          style={{ color: "var(--text-secondary)" }}
-                        >
-                          {horse.trainer.name}
-                        </Link>
-                      ) : (
-                        <span className="text-sm" style={{ color: "var(--text-tertiary)" }}>—</span>
-                      )}
-                    </td>
-                    <td className="py-3 pl-3 text-right tabular-nums font-medium" style={{ color: "var(--text-secondary)" }}>
-                      {horse.totalRaces || "—"}
-                    </td>
-                    <td
-                      className="py-3 pl-3 text-right tabular-nums font-medium"
-                      style={{ color: horse.wins > 0 ? "var(--green-700)" : "var(--text-secondary)" }}
-                    >
-                      {horse.wins || "—"}
-                    </td>
-                    <td className="py-3 pl-3 text-right tabular-nums font-medium" style={{ color: "var(--text-secondary)" }}>
-                      {horse.avgPos ?? "—"}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+        <HorsesTable horses={horses} emptyMessage="No horses registered yet." />
       </GlassCard>
 
     </main>

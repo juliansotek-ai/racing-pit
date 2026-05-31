@@ -2,8 +2,10 @@ export const dynamic = "force-dynamic";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { GlassCard } from "@/components/ui";
+import { auth } from "@/lib/auth";
+import { TrainersTable, type TrainerRow } from "@/components/TrainersTable";
 
-async function getTrainers() {
+async function getAllTrainers(): Promise<TrainerRow[]> {
   const trainers = await prisma.trainer.findMany({
     include: {
       country: { select: { name: true } },
@@ -39,8 +41,98 @@ async function getTrainers() {
   });
 }
 
+async function getFavoriteTrainers(userId: string): Promise<TrainerRow[]> {
+  const favorites = await prisma.favorite.findMany({
+    where: { userId, trainerId: { not: null } },
+    include: {
+      trainer: {
+        include: {
+          country: { select: { name: true } },
+          horses: {
+            select: {
+              id: true,
+              raceEntries: {
+                where: { finishPos: { not: null } },
+                select: { finishPos: true },
+              },
+            },
+          },
+        },
+      },
+    },
+  });
+
+  const trainerIds = favorites.map((f) => f.trainerId!);
+  if (trainerIds.length === 0) return [];
+
+  // Get all horse IDs for these trainers to look up bets
+  const trainerHorses = await prisma.horse.findMany({
+    where: { trainerId: { in: trainerIds } },
+    select: { id: true, trainerId: true },
+  });
+
+  const horseToTrainer: Record<string, string> = {};
+  for (const h of trainerHorses) {
+    if (h.trainerId) horseToTrainer[h.id] = h.trainerId;
+  }
+  const allHorseIds = trainerHorses.map((h) => h.id);
+
+  const bets =
+    allHorseIds.length > 0
+      ? await prisma.bet.findMany({
+          where: { userId, raceEntry: { horseId: { in: allHorseIds } } },
+          include: { raceEntry: { select: { horseId: true } } },
+        })
+      : [];
+
+  const betsByTrainer: Record<string, { total: number; settledStake: number; settledPayout: number }> = {};
+  for (const bet of bets) {
+    const trainerId = horseToTrainer[bet.raceEntry.horseId];
+    if (!trainerId) continue;
+    if (!betsByTrainer[trainerId]) betsByTrainer[trainerId] = { total: 0, settledStake: 0, settledPayout: 0 };
+    betsByTrainer[trainerId].total++;
+    if (bet.result !== null) {
+      betsByTrainer[trainerId].settledStake += bet.stake;
+      betsByTrainer[trainerId].settledPayout += bet.payout ?? 0;
+    }
+  }
+
+  return favorites
+    .filter((f) => f.trainer != null)
+    .map((f) => {
+      const t = f.trainer!;
+      const positions = t.horses.flatMap((h) => h.raceEntries.map((e) => e.finishPos!));
+      const wins = positions.filter((p) => p === 1).length;
+      const stats = betsByTrainer[t.id];
+      return {
+        id: t.id,
+        name: t.name,
+        country: t.country,
+        totalHorses: t.horses.length,
+        totalRunners: positions.length,
+        wins,
+        winRate: positions.length > 0 ? Math.round((wins / positions.length) * 100) : null,
+        avgPos:
+          positions.length > 0
+            ? (positions.reduce((a, b) => a + b, 0) / positions.length).toFixed(1)
+            : null,
+        betsPlaced: stats?.total ?? 0,
+        roi:
+          stats && stats.settledStake > 0
+            ? ((stats.settledPayout - stats.settledStake) / stats.settledStake) * 100
+            : null,
+      };
+    })
+    .sort((a, b) => b.wins - a.wins);
+}
+
 export default async function TrainersPage() {
-  const trainers = await getTrainers();
+  const session = await auth();
+
+  const [trainers, favoriteTrainers] = await Promise.all([
+    getAllTrainers(),
+    session?.user?.id ? getFavoriteTrainers(session.user.id) : Promise.resolve(null),
+  ]);
 
   return (
     <main className="max-w-6xl mx-auto px-4 sm:px-6 py-10 flex flex-col gap-8">
@@ -61,80 +153,23 @@ export default async function TrainersPage() {
         </Link>
       </div>
 
+      {favoriteTrainers !== null && (
+        <div className="flex flex-col gap-3">
+          <h2 className="text-xs font-semibold tracking-widest uppercase" style={{ color: "var(--text-secondary)" }}>
+            ★ Followed Trainers
+          </h2>
+          <GlassCard variant="default" radius="xl" padding="md">
+            <TrainersTable
+              trainers={favoriteTrainers}
+              showBetStats
+              emptyMessage="You haven't followed any trainers yet. Click Follow on a trainer's page to track it here."
+            />
+          </GlassCard>
+        </div>
+      )}
+
       <GlassCard variant="default" radius="xl" padding="md">
-        {trainers.length === 0 ? (
-          <p className="py-6 text-center text-sm" style={{ color: "var(--text-tertiary)" }}>
-            No trainers registered yet.
-          </p>
-        ) : (
-          <div className="overflow-x-auto -mx-6 px-6">
-            <table className="w-full text-sm border-collapse">
-              <thead>
-                <tr>
-                  <th className="text-left py-2 pr-4 text-[10px] font-semibold tracking-widest uppercase" style={{ color: "var(--text-tertiary)" }}>
-                    Trainer
-                  </th>
-                  <th className="text-right py-2 pl-3 text-[10px] font-semibold tracking-widest uppercase hidden sm:table-cell" style={{ color: "var(--text-tertiary)" }}>
-                    Horses
-                  </th>
-                  <th className="text-right py-2 pl-3 text-[10px] font-semibold tracking-widest uppercase" style={{ color: "var(--text-tertiary)" }}>
-                    Runners
-                  </th>
-                  <th className="text-right py-2 pl-3 text-[10px] font-semibold tracking-widest uppercase" style={{ color: "var(--text-tertiary)" }}>
-                    Wins
-                  </th>
-                  <th className="text-right py-2 pl-3 text-[10px] font-semibold tracking-widest uppercase hidden sm:table-cell" style={{ color: "var(--text-tertiary)" }}>
-                    Win%
-                  </th>
-                  <th className="text-right py-2 pl-3 text-[10px] font-semibold tracking-widest uppercase hidden sm:table-cell" style={{ color: "var(--text-tertiary)" }}>
-                    Avg
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {trainers.map((trainer) => (
-                  <tr
-                    key={trainer.id}
-                    className="transition-colors hover:bg-black/[0.025] group"
-                    style={{ borderTop: "1px solid var(--glass-border-subtle)" }}
-                  >
-                    <td className="py-3 pr-4">
-                      <Link
-                        href={`/trainers/${trainer.id}`}
-                        className="flex flex-col group-hover:underline underline-offset-2 decoration-1"
-                      >
-                        <span className="font-display font-medium" style={{ color: "var(--text-primary)" }}>
-                          {trainer.name}
-                        </span>
-                        <span className="text-xs" style={{ color: "var(--text-tertiary)" }}>
-                          {trainer.country.name}
-                        </span>
-                      </Link>
-                    </td>
-                    <td className="py-3 pl-3 text-right tabular-nums font-medium hidden sm:table-cell" style={{ color: "var(--text-secondary)" }}>
-                      {trainer.totalHorses || "—"}
-                    </td>
-                    <td className="py-3 pl-3 text-right tabular-nums font-medium" style={{ color: "var(--text-secondary)" }}>
-                      {trainer.totalRunners || "—"}
-                    </td>
-                    <td
-                      className="py-3 pl-3 text-right tabular-nums font-medium"
-                      style={{ color: trainer.wins > 0 ? "var(--green-700)" : "var(--text-secondary)" }}
-                    >
-                      {trainer.wins || "—"}
-                    </td>
-                    <td className="py-3 pl-3 text-right tabular-nums font-medium hidden sm:table-cell" style={{ color: "var(--text-secondary)" }}>
-                      {trainer.winRate != null ? `${trainer.winRate}%` : "—"}
-                    </td>
-                    <td className="py-3 pl-3 text-right tabular-nums font-medium hidden sm:table-cell" style={{ color: "var(--text-secondary)" }}>
-                      {trainer.avgPos ?? "—"}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+        <TrainersTable trainers={trainers} emptyMessage="No trainers registered yet." />
       </GlassCard>
 
     </main>

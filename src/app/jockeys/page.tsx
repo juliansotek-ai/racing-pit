@@ -2,8 +2,10 @@ export const dynamic = "force-dynamic";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { GlassCard } from "@/components/ui";
+import { auth } from "@/lib/auth";
+import { JockeysTable, type JockeyRow } from "@/components/JockeysTable";
 
-async function getJockeys() {
+async function getAllJockeys(): Promise<JockeyRow[]> {
   const jockeys = await prisma.jockey.findMany({
     include: {
       country: { select: { name: true } },
@@ -33,8 +35,77 @@ async function getJockeys() {
   });
 }
 
+async function getFavoriteJockeys(userId: string): Promise<JockeyRow[]> {
+  const favorites = await prisma.favorite.findMany({
+    where: { userId, jockeyId: { not: null } },
+    include: {
+      jockey: {
+        include: {
+          country: { select: { name: true } },
+          raceEntries: {
+            where: { finishPos: { not: null } },
+            select: { finishPos: true },
+          },
+        },
+      },
+    },
+  });
+
+  const jockeyIds = favorites.map((f) => f.jockeyId!);
+  if (jockeyIds.length === 0) return [];
+
+  const bets = await prisma.bet.findMany({
+    where: { userId, raceEntry: { jockeyId: { in: jockeyIds } } },
+    include: { raceEntry: { select: { jockeyId: true } } },
+  });
+
+  const betsByJockey: Record<string, { total: number; settledStake: number; settledPayout: number }> = {};
+  for (const bet of bets) {
+    const id = bet.raceEntry.jockeyId;
+    if (!id) continue;
+    if (!betsByJockey[id]) betsByJockey[id] = { total: 0, settledStake: 0, settledPayout: 0 };
+    betsByJockey[id].total++;
+    if (bet.result !== null) {
+      betsByJockey[id].settledStake += bet.stake;
+      betsByJockey[id].settledPayout += bet.payout ?? 0;
+    }
+  }
+
+  return favorites
+    .filter((f) => f.jockey != null)
+    .map((f) => {
+      const j = f.jockey!;
+      const positions = j.raceEntries.map((e) => e.finishPos!);
+      const wins = positions.filter((p) => p === 1).length;
+      const stats = betsByJockey[j.id];
+      return {
+        id: j.id,
+        name: j.name,
+        country: j.country,
+        totalRides: positions.length,
+        wins,
+        winRate: positions.length > 0 ? Math.round((wins / positions.length) * 100) : null,
+        avgPos:
+          positions.length > 0
+            ? (positions.reduce((a, b) => a + b, 0) / positions.length).toFixed(1)
+            : null,
+        betsPlaced: stats?.total ?? 0,
+        roi:
+          stats && stats.settledStake > 0
+            ? ((stats.settledPayout - stats.settledStake) / stats.settledStake) * 100
+            : null,
+      };
+    })
+    .sort((a, b) => b.wins - a.wins);
+}
+
 export default async function JockeysPage() {
-  const jockeys = await getJockeys();
+  const session = await auth();
+
+  const [jockeys, favoriteJockeys] = await Promise.all([
+    getAllJockeys(),
+    session?.user?.id ? getFavoriteJockeys(session.user.id) : Promise.resolve(null),
+  ]);
 
   return (
     <main className="max-w-6xl mx-auto px-4 sm:px-6 py-10 flex flex-col gap-8">
@@ -55,74 +126,23 @@ export default async function JockeysPage() {
         </Link>
       </div>
 
+      {favoriteJockeys !== null && (
+        <div className="flex flex-col gap-3">
+          <h2 className="text-xs font-semibold tracking-widest uppercase" style={{ color: "var(--text-secondary)" }}>
+            ★ Followed Jockeys
+          </h2>
+          <GlassCard variant="default" radius="xl" padding="md">
+            <JockeysTable
+              jockeys={favoriteJockeys}
+              showBetStats
+              emptyMessage="You haven't followed any jockeys yet. Click Follow on a jockey's page to track it here."
+            />
+          </GlassCard>
+        </div>
+      )}
+
       <GlassCard variant="default" radius="xl" padding="md">
-        {jockeys.length === 0 ? (
-          <p className="py-6 text-center text-sm" style={{ color: "var(--text-tertiary)" }}>
-            No jockeys registered yet.
-          </p>
-        ) : (
-          <div className="overflow-x-auto -mx-6 px-6">
-            <table className="w-full text-sm border-collapse">
-              <thead>
-                <tr>
-                  <th className="text-left py-2 pr-4 text-[10px] font-semibold tracking-widest uppercase" style={{ color: "var(--text-tertiary)" }}>
-                    Jockey
-                  </th>
-                  <th className="text-right py-2 pl-3 text-[10px] font-semibold tracking-widest uppercase" style={{ color: "var(--text-tertiary)" }}>
-                    Rides
-                  </th>
-                  <th className="text-right py-2 pl-3 text-[10px] font-semibold tracking-widest uppercase" style={{ color: "var(--text-tertiary)" }}>
-                    Wins
-                  </th>
-                  <th className="text-right py-2 pl-3 text-[10px] font-semibold tracking-widest uppercase hidden sm:table-cell" style={{ color: "var(--text-tertiary)" }}>
-                    Win%
-                  </th>
-                  <th className="text-right py-2 pl-3 text-[10px] font-semibold tracking-widest uppercase hidden sm:table-cell" style={{ color: "var(--text-tertiary)" }}>
-                    Avg
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {jockeys.map((jockey) => (
-                  <tr
-                    key={jockey.id}
-                    className="transition-colors hover:bg-black/[0.025] group"
-                    style={{ borderTop: "1px solid var(--glass-border-subtle)" }}
-                  >
-                    <td className="py-3 pr-4">
-                      <Link
-                        href={`/jockeys/${jockey.id}`}
-                        className="flex flex-col group-hover:underline underline-offset-2 decoration-1"
-                      >
-                        <span className="font-display font-medium" style={{ color: "var(--text-primary)" }}>
-                          {jockey.name}
-                        </span>
-                        <span className="text-xs" style={{ color: "var(--text-tertiary)" }}>
-                          {jockey.country.name}
-                        </span>
-                      </Link>
-                    </td>
-                    <td className="py-3 pl-3 text-right tabular-nums font-medium" style={{ color: "var(--text-secondary)" }}>
-                      {jockey.totalRides || "—"}
-                    </td>
-                    <td
-                      className="py-3 pl-3 text-right tabular-nums font-medium"
-                      style={{ color: jockey.wins > 0 ? "var(--green-700)" : "var(--text-secondary)" }}
-                    >
-                      {jockey.wins || "—"}
-                    </td>
-                    <td className="py-3 pl-3 text-right tabular-nums font-medium hidden sm:table-cell" style={{ color: "var(--text-secondary)" }}>
-                      {jockey.winRate != null ? `${jockey.winRate}%` : "—"}
-                    </td>
-                    <td className="py-3 pl-3 text-right tabular-nums font-medium hidden sm:table-cell" style={{ color: "var(--text-secondary)" }}>
-                      {jockey.avgPos ?? "—"}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+        <JockeysTable jockeys={jockeys} emptyMessage="No jockeys registered yet." />
       </GlassCard>
 
     </main>

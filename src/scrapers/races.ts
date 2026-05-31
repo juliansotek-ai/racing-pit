@@ -1,107 +1,66 @@
 /**
- * Scraper for upcoming races from rennliste.de
+ * Scraper for upcoming races from galopp-statistik.de
  *
- * SELECTOR VERIFICATION:
- *   Set DEBUG_SCRAPER=1 in your environment to dump raw HTML from each fetch.
- *   Then inspect the output to confirm or update the SEL constants below.
+ * Flow: RennenMenu.php → UpcomRenntag.php → RennenDetails.php
  *
  * USAGE:
- *   npx tsx src/scrapers/races.ts          # run once immediately
- *   DEBUG_SCRAPER=1 npx tsx src/scrapers/races.ts  # dump HTML for inspection
+ *   npx tsx src/scrapers/races.ts
+ *   DEBUG_SCRAPER=1 npx tsx src/scrapers/races.ts
  */
 
 import * as cheerio from "cheerio";
-import type { AnyNode } from "domhandler";
 import { prisma } from "@/lib/prisma";
 
-const BASE_URL = "https://www.rennliste.de";
+const BASE_URL = "https://www.galopp-statistik.de";
+const DEBUG = process.env.DEBUG_SCRAPER === "1";
 
-// ─── Selectors ────────────────────────────────────────────────────────────────
-// Each value is an ordered list of candidates — the first match wins.
-// Update these after inspecting the live site with DEBUG_SCRAPER=1.
-const SEL = {
-  // Listing page: one entry per upcoming race day
-  meetingRow: [".renntag", "tr.renntag", ".meeting-item", "table.renntage tbody tr"],
-  meetingLink: ["a.renntag-link", "a[href*='/renntag']", "td:first-child a", "a"],
-  meetingDate: [".datum", "td.datum", ".date", "td:nth-child(1)"],
-  meetingVenue: [".ort", "td.ort", ".venue", "td:nth-child(2)"],
+// ─── Venue code → display name map ───────────────────────────────────────────
 
-  // Detail page: one entry per race in the meeting
-  raceRow: [".rennen", "tr.rennen", ".race-row", "table.rennen tbody tr", "tbody tr"],
-  raceNumber: [".nr", "td.nr", "td:nth-child(1)"],
-  raceName: [".name", ".rennen-name", "td.name", "td:nth-child(2) a", "td:nth-child(2)"],
-  raceTime: [".startzeit", ".uhrzeit", "td.startzeit", "td:nth-child(3)"],
-  raceDistance: [".distanz", "td.distanz", "td:nth-child(4)"],
-  raceClass: [".kategorie", ".klasse", "td.kategorie", "td:nth-child(5)"],
-  racePrize: [".dotierung", ".preis", "td.dotierung", "td:nth-child(6)"],
-} as const;
+const VENUE_NAMES: Record<string, string> = {
+  Bad: "Baden-Baden", Dob: "Bad Doberan", Hrz: "Bad Harzburg",
+  Brem: "Bremen", "Do-S": "Dortmund (Sand)", "Do-T": "Dortmund (Turf)",
+  Dres: "Dresden", Düs: "Düsseldorf", Hall: "Halle", Han: "Hannover",
+  Ham: "Hamburg", Hop: "Hoppegarten", Köln: "Köln", Kre: "Krefeld",
+  Leip: "Leipzig", Mag: "Magdeburg", Man: "Mannheim", Mül: "Mülheim",
+  Mün: "München", "Ne-S": "Neuss (Sand)", Saar: "Saarbrücken", Zwe: "Zweibrücken",
+};
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
-const DEBUG = process.env.DEBUG_SCRAPER === "1";
 
 async function fetchHtml(url: string): Promise<string> {
   const res = await fetch(url, {
     headers: {
-      "User-Agent":
-        "Mozilla/5.0 (compatible; RacingPitBot/1.0; +https://racing-pit.vercel.app)",
-      Accept: "text/html,application/xhtml+xml",
-      "Accept-Language": "de,en;q=0.8",
+      "User-Agent": "Mozilla/5.0 (compatible; RacingPitBot/1.0; +https://racing-pit.vercel.app)",
+      "Accept": "text/html,application/xhtml+xml",
+      "Accept-Language": "de-DE,de;q=0.9",
     },
-    signal: AbortSignal.timeout(15_000),
+    signal: AbortSignal.timeout(20_000),
   });
-
   if (!res.ok) throw new Error(`HTTP ${res.status} for ${url}`);
   const html = await res.text();
-  if (DEBUG) {
-    console.log(`\n=== HTML dump: ${url} ===\n${html.slice(0, 8000)}\n`);
-  }
+  if (DEBUG) console.log(`\n=== ${url} ===\n${html.slice(0, 3000)}\n`);
   return html;
 }
 
-/** Return first text match from a list of CSS selectors. */
-function firstText($: cheerio.CheerioAPI, ctx: cheerio.Cheerio<AnyNode>, selectors: readonly string[]): string {
-  for (const sel of selectors) {
-    const text = $(ctx).find(sel).first().text().trim();
-    if (text) return text;
-  }
-  return "";
-}
-
-/** Return first attribute match from a list of CSS selectors. */
-function firstAttr($: cheerio.CheerioAPI, ctx: cheerio.Cheerio<AnyNode>, selectors: readonly string[], attr: string): string {
-  for (const sel of selectors) {
-    const val = $(ctx).find(sel).first().attr(attr)?.trim();
-    if (val) return val;
-  }
-  return "";
-}
-
-// ─── Parse helpers ────────────────────────────────────────────────────────────
-
-/**
- * Parse a German date string like "31.05.2026" or "Sonntag, 31.05.2026 14:00"
- * into a JavaScript Date object (UTC).
- */
-function parseGermanDate(raw: string): Date | null {
-  const match = raw.match(/(\d{1,2})\.(\d{1,2})\.(\d{4})(?:[^\d]+(\d{1,2}):(\d{2}))?/);
-  if (!match) return null;
-  const [, day, month, year, hour = "0", min = "0"] = match;
-  return new Date(
-    Date.UTC(Number(year), Number(month) - 1, Number(day), Number(hour), Number(min))
-  );
-}
-
-/** Parse "1400m", "1.400 m", "1400" → metres as number. */
 function parseDistance(raw: string): number | null {
   const n = Number(raw.replace(/[^\d]/g, ""));
   return n > 0 ? n : null;
 }
 
-/** Parse "100.000 €", "€ 50,000", "50000" → float. */
 function parsePrize(raw: string): number | null {
-  const n = parseFloat(raw.replace(/[^\d,.-]/g, "").replace(",", "."));
-  return isNaN(n) ? null : n;
+  const n = parseFloat(raw.replace(/[^\d]/g, ""));
+  return isNaN(n) || n === 0 ? null : n;
+}
+
+function parseWeight(raw: string): number | null {
+  const n = parseFloat(raw.replace(",", ".").replace(/[^\d.]/g, ""));
+  return isNaN(n) || n === 0 ? null : n;
+}
+
+/** Parse "YYYY-MM-DD" + "HH:MM" (or "--") → UTC Date */
+function buildDate(datePart: string, timePart: string): Date {
+  const time = /^\d{1,2}:\d{2}$/.test(timePart) ? timePart : "00:00";
+  return new Date(`${datePart}T${time}:00Z`);
 }
 
 // ─── DB helpers ───────────────────────────────────────────────────────────────
@@ -109,111 +68,234 @@ function parsePrize(raw: string): number | null {
 let _germanyId: string | null = null;
 async function getGermanyId(): Promise<string> {
   if (_germanyId) return _germanyId;
-  const country = await prisma.country.upsert({
+  const c = await prisma.country.upsert({
     where: { code: "DE" },
     create: { code: "DE", name: "Deutschland" },
     update: {},
   });
-  _germanyId = country.id;
-  return country.id;
+  _germanyId = c.id;
+  return c.id;
 }
 
-async function upsertRacecourse(name: string, city: string): Promise<string> {
-  // Use a slug as externalId so the same venue always resolves to one row.
-  const externalId = `rennliste-${name.toLowerCase().replace(/\s+/g, "-")}`;
+async function upsertRacecourse(ortCode: string, displayName: string): Promise<string> {
+  const externalId = `gs-venue-${ortCode.toLowerCase()}`;
   const countryId = await getGermanyId();
   const rc = await prisma.racecourse.upsert({
     where: { externalId },
-    create: { externalId, name, city: city || name, countryId },
-    update: { name, city: city || name },
+    create: { externalId, name: displayName, city: displayName, countryId },
+    update: { name: displayName, city: displayName },
   });
   return rc.id;
 }
 
-// ─── Core scraping logic ──────────────────────────────────────────────────────
+async function upsertTrainer(name: string): Promise<string> {
+  const externalId = `gs-trainer-${name.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "")}`;
+  const countryId = await getGermanyId();
+  const t = await prisma.trainer.upsert({
+    where: { externalId },
+    create: { externalId, name, countryId },
+    update: { name },
+  });
+  return t.id;
+}
+
+async function upsertJockey(name: string): Promise<string> {
+  const externalId = `gs-jockey-${name.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "")}`;
+  const countryId = await getGermanyId();
+  const j = await prisma.jockey.upsert({
+    where: { externalId },
+    create: { externalId, name, countryId },
+    update: { name },
+  });
+  return j.id;
+}
+
+async function upsertHorse(name: string, trainerId?: string): Promise<string> {
+  const externalId = `gs-horse-${name.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-()/]/g, "")}`;
+  const countryId = await getGermanyId();
+  const h = await prisma.horse.upsert({
+    where: { externalId },
+    create: { externalId, name, countryId, trainerId },
+    update: { name, ...(trainerId ? { trainerId } : {}) },
+  });
+  return h.id;
+}
+
+// ─── Step 1: get upcoming meeting URLs from RennenMenu.php ───────────────────
 
 interface MeetingRef {
   url: string;
-  date: string;
-  venue: string;
+  datePart: string;
+  ortCode: string;
 }
 
-async function fetchMeetingList(): Promise<MeetingRef[]> {
-  const html = await fetchHtml(`${BASE_URL}/`);
+async function fetchUpcomingMeetings(): Promise<MeetingRef[]> {
+  const html = await fetchHtml(`${BASE_URL}/RennenMenu.php`);
   const $ = cheerio.load(html);
   const meetings: MeetingRef[] = [];
+  const seen = new Set<string>();
 
-  const rowSel = SEL.meetingRow.join(", ");
-  $(rowSel).each((_, el) => {
-    const $el = $(el);
-    let href = firstAttr($, $el, SEL.meetingLink, "href");
-    if (!href) return;
-    if (!href.startsWith("http")) href = `${BASE_URL}${href.startsWith("/") ? "" : "/"}${href}`;
-
-    const date = firstText($, $el, SEL.meetingDate) || $el.text().trim();
-    const venue = firstText($, $el, SEL.meetingVenue);
-
-    if (href && date) meetings.push({ url: href, date, venue });
+  $("a[href*='UpcomRenntag.php']").each((_, el) => {
+    const href = $(el).attr("href") ?? "";
+    const params = new URLSearchParams(href.split("?")[1] ?? "");
+    const datePart = params.get("Datum") ?? "";
+    const ortCode = decodeURIComponent(params.get("Ort") ?? "");
+    if (!datePart || !ortCode) return;
+    const key = `${datePart}-${ortCode}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    const url = href.startsWith("http") ? href : `${BASE_URL}/${href.replace(/^\//, "")}`;
+    meetings.push({ url, datePart, ortCode });
   });
 
-  if (DEBUG) console.log(`Found ${meetings.length} meeting(s):`, meetings);
+  if (DEBUG) console.log(`Found ${meetings.length} upcoming meeting(s)`);
   return meetings;
 }
 
-interface ParsedRace {
-  externalId: string;
+// ─── Step 2: parse race cards from UpcomRenntag.php ──────────────────────────
+
+interface RaceRef {
+  detailUrl: string;
+  datePart: string;
+  ortCode: string;
+  raceNum: string; // "Nummer" param
+  raceNo: number;
   name: string;
-  scheduledAt: Date;
-  distance: number | null;
-  raceClass: string | null;
-  prize: number | null;
+  time: string;
+  distanceRaw: string;
+  prizeRaw: string;
+  kategorie: string;
+  klasse: string;
 }
 
-async function fetchMeetingRaces(meeting: MeetingRef): Promise<ParsedRace[]> {
-  const html = await fetchHtml(meeting.url);
+function parseUpcomingDayPage(html: string, meetingDatePart: string, meetingOrtCode: string): RaceRef[] {
   const $ = cheerio.load(html);
-  const races: ParsedRace[] = [];
+  const refs: RaceRef[] = [];
 
-  const baseDate = parseGermanDate(meeting.date);
-  const rowSel = SEL.raceRow.join(", ");
+  $(".kompletter-kasten-das-rennen").each((_, block) => {
+    const $block = $(block);
+    const $link = $block.find("a[href*='RennenDetails.php']").first();
+    const href = $link.attr("href") ?? "";
+    if (!href) return;
 
-  $(rowSel).each((_, el) => {
-    const $el = $(el);
-    const raceNo = firstText($, $el, SEL.raceNumber);
-    const name = firstText($, $el, SEL.raceName);
-    const timeStr = firstText($, $el, SEL.raceTime);
-    const distStr = firstText($, $el, SEL.raceDistance);
-    const classStr = firstText($, $el, SEL.raceClass);
-    const prizeStr = firstText($, $el, SEL.racePrize);
+    const params = new URLSearchParams(href.split("?")[1] ?? "");
+    const datePart = params.get("Datum") ?? meetingDatePart;
+    const ortCode = decodeURIComponent(params.get("Ort") ?? meetingOrtCode);
+    const raceNum = params.get("Nummer") ?? "";
+    if (!raceNum) return;
 
-    if (!name || name.toLowerCase().includes("rennen") === false && !raceNo) return;
+    const url = href.startsWith("http") ? href : `${BASE_URL}/${href.replace(/^\//, "")}`;
+    const raceNo = parseInt(raceNum, 10) || 0;
+    const name = $block.find(".titel-des-rennens").first().text().trim();
+    const time = $block.find(".uhrzeit").first().text().trim();
+    const distanceCash = $block.find(".distance-cash").first().text().trim();
+    const [distanceRaw = "", prizeRaw = ""] = distanceCash.split("-").map(s => s.trim());
+    const bTags = $block.find(".kat-class b");
+    const kategorie = $(bTags[0]).text().trim();
+    const klasse = $(bTags[1]).text().trim();
 
-    // Build scheduledAt from baseDate + time on the page, or from a combined string
-    let scheduledAt = baseDate;
-    if (!scheduledAt) {
-      scheduledAt = parseGermanDate(timeStr) ?? new Date();
-    } else if (timeStr) {
-      const timeParsed = parseGermanDate(`${meeting.date} ${timeStr}`);
-      if (timeParsed) scheduledAt = timeParsed;
-    }
-
-    // External ID: venue + date + race number (stable across re-scrapes)
-    const slug = meeting.venue.toLowerCase().replace(/\s+/g, "-");
-    const dateStr = scheduledAt.toISOString().slice(0, 10);
-    const externalId = `rennliste-${slug}-${dateStr}-r${raceNo || races.length + 1}`;
-
-    races.push({
-      externalId,
-      name: name || `Rennen ${raceNo}`,
-      scheduledAt,
-      distance: parseDistance(distStr),
-      raceClass: classStr || null,
-      prize: parsePrize(prizeStr),
-    });
+    refs.push({ detailUrl: url, datePart, ortCode, raceNum, raceNo, name, time, distanceRaw, prizeRaw, kategorie, klasse });
   });
 
-  if (DEBUG) console.log(`  → ${races.length} race(s) in meeting ${meeting.venue} ${meeting.date}`);
-  return races;
+  return refs;
+}
+
+// ─── Step 3: parse entry list from RennenDetails.php ─────────────────────────
+
+interface EntryData {
+  nummer: number;
+  horseName: string;
+  jockeyName: string;
+  trainerName: string;
+  weight: number | null;
+}
+
+function parseRaceDetail(html: string): EntryData[] {
+  const $ = cheerio.load(html);
+  const entries: EntryData[] = [];
+
+  // Skip the header row (.kopf-uebersicht), process data rows
+  $(".uebersicht-row").not(".kopf-uebersicht").each((_, row) => {
+    const $row = $(row);
+
+    const nummerText = $row.find(".reihe.nummer").first().text().trim();
+    const nummer = parseInt(nummerText, 10) || 0;
+
+    // Horse name: inside <a> link in pferdename div
+    const horseName = $row.find(".reihe.pferdename a").first().text().trim();
+    if (!horseName) return;
+
+    // Jockey: direct text of .reihe.jockey
+    const jockeyName = $row.find(".reihe.jockey").first().text().trim();
+
+    // Trainer: strip .TWechsel span (shows jockey changes)
+    const trainerName = $row.find(".reihe.trainer").first()
+      .clone().find(".TWechsel").remove().end().text().trim();
+
+    const weight = parseWeight($row.find(".reihe.gewicht").first().text());
+
+    entries.push({ nummer, horseName, jockeyName, trainerName, weight });
+  });
+
+  if (DEBUG) console.log(`  Parsed ${entries.length} entries`);
+  return entries;
+}
+
+// ─── Persist a single upcoming race + entries ─────────────────────────────────
+
+async function persistUpcomingRace(
+  ref: RaceRef,
+  racecourseId: string,
+  entries: EntryData[],
+): Promise<number> {
+  const externalId = `gs-race-${ref.datePart}-${ref.ortCode.toLowerCase()}-r${ref.raceNum}`;
+  const scheduledAt = buildDate(ref.datePart, ref.time);
+
+  await prisma.race.upsert({
+    where: { externalId },
+    create: {
+      externalId,
+      name: ref.name || `Rennen ${ref.raceNo}`,
+      racecourseId,
+      scheduledAt,
+      distance: parseDistance(ref.distanceRaw) ?? 0,
+      raceClass: ref.klasse || ref.kategorie || null,
+      prize: parsePrize(ref.prizeRaw),
+      status: "SCHEDULED",
+    },
+    update: {
+      name: ref.name || `Rennen ${ref.raceNo}`,
+      scheduledAt,
+      distance: parseDistance(ref.distanceRaw) ?? 0,
+      raceClass: ref.klasse || ref.kategorie || null,
+      prize: parsePrize(ref.prizeRaw),
+    },
+  });
+
+  const race = await prisma.race.findUnique({ where: { externalId } });
+  if (!race) return 0;
+
+  let persisted = 0;
+  for (const entry of entries) {
+    if (!entry.horseName) continue;
+    try {
+      let trainerId: string | undefined;
+      if (entry.trainerName) trainerId = await upsertTrainer(entry.trainerName);
+      const horseId = await upsertHorse(entry.horseName, trainerId);
+      let jockeyId: string | undefined;
+      if (entry.jockeyName) jockeyId = await upsertJockey(entry.jockeyName);
+
+      await prisma.raceEntry.upsert({
+        where: { raceId_horseId: { raceId: race.id, horseId } },
+        create: { raceId: race.id, horseId, jockeyId, weight: entry.weight },
+        update: { jockeyId, weight: entry.weight },
+      });
+      persisted++;
+    } catch (err) {
+      console.error(`Failed to persist entry ${entry.horseName}:`, err);
+    }
+  }
+  return persisted;
 }
 
 // ─── Public entry point ───────────────────────────────────────────────────────
@@ -222,60 +304,46 @@ export async function scrapeUpcomingRaces(): Promise<{ upserted: number; skipped
   let upserted = 0;
   let skipped = 0;
 
-  const meetings = await fetchMeetingList();
+  const meetings = await fetchUpcomingMeetings();
 
   for (const meeting of meetings) {
+    const venueName = VENUE_NAMES[meeting.ortCode] ?? meeting.ortCode;
     let racecourseId: string;
     try {
-      // Venue name might be in the meeting object or needs to be parsed from detail page
-      const venueName = meeting.venue || "Unbekannt";
-      racecourseId = await upsertRacecourse(venueName, venueName);
+      racecourseId = await upsertRacecourse(meeting.ortCode, venueName);
     } catch (err) {
-      console.error(`Failed to upsert racecourse for ${meeting.venue}:`, err);
+      console.error(`Failed to upsert racecourse ${meeting.ortCode}:`, err);
       skipped++;
       continue;
     }
 
-    let races: ParsedRace[];
+    let dayHtml: string;
     try {
-      races = await fetchMeetingRaces(meeting);
+      dayHtml = await fetchHtml(meeting.url);
     } catch (err) {
-      console.error(`Failed to fetch meeting ${meeting.url}:`, err);
+      console.error(`Failed to fetch ${meeting.url}:`, err);
       skipped++;
       continue;
     }
 
-    for (const race of races) {
+    const raceRefs = parseUpcomingDayPage(dayHtml, meeting.datePart, meeting.ortCode);
+    if (DEBUG) console.log(`  ${meeting.datePart} ${venueName}: ${raceRefs.length} race(s)`);
+
+    for (const ref of raceRefs) {
       try {
-        await prisma.race.upsert({
-          where: { externalId: race.externalId },
-          create: {
-            externalId: race.externalId,
-            name: race.name,
-            racecourseId,
-            scheduledAt: race.scheduledAt,
-            distance: race.distance ?? 0,
-            raceClass: race.raceClass,
-            prize: race.prize,
-            status: "SCHEDULED",
-          },
-          update: {
-            name: race.name,
-            scheduledAt: race.scheduledAt,
-            distance: race.distance ?? 0,
-            raceClass: race.raceClass,
-            prize: race.prize,
-          },
-        });
+        const detailHtml = await fetchHtml(ref.detailUrl);
+        const entries = parseRaceDetail(detailHtml);
+        const count = await persistUpcomingRace(ref, racecourseId, entries);
         upserted++;
+        if (DEBUG) console.log(`    Race ${ref.raceNo}: ${ref.name} — ${count} entries`);
       } catch (err) {
-        console.error(`Failed to upsert race ${race.externalId}:`, err);
+        console.error(`Failed to process race ${ref.raceNum} at ${ref.ortCode}:`, err);
         skipped++;
       }
+      await new Promise(r => setTimeout(r, 400));
     }
 
-    // Polite crawl delay between meeting pages
-    await new Promise((r) => setTimeout(r, 500));
+    await new Promise(r => setTimeout(r, 500));
   }
 
   console.log(`scrapeUpcomingRaces: upserted=${upserted} skipped=${skipped}`);
@@ -286,6 +354,6 @@ export async function scrapeUpcomingRaces(): Promise<{ upserted: number; skipped
 
 if (require.main === module) {
   scrapeUpcomingRaces()
-    .then((r) => { console.log(r); process.exit(0); })
-    .catch((e) => { console.error(e); process.exit(1); });
+    .then(r => { console.log(r); process.exit(0); })
+    .catch(e => { console.error(e); process.exit(1); });
 }
