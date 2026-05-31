@@ -1,6 +1,5 @@
 export const dynamic = "force-dynamic";
 
-import { redirect } from "next/navigation";
 import Link from "next/link";
 import { format } from "date-fns";
 import { auth } from "@/lib/auth";
@@ -90,7 +89,35 @@ export default async function FavoritesPage({
   searchParams: Promise<{ tab?: string }>;
 }) {
   const session = await auth();
-  if (!session?.user?.id) redirect("/auth/signin");
+  if (!session?.user?.id) {
+    return (
+      <main className="max-w-5xl mx-auto px-4 sm:px-6 py-10 flex flex-col gap-8">
+        <div className="flex flex-col gap-1">
+          <h1 className="display-xl" style={{ color: "var(--green-900)" }}>Favourites</h1>
+          <p className="text-sm" style={{ color: "var(--text-tertiary)" }}>
+            Your saved horses, jockeys and trainers
+          </p>
+        </div>
+        <GlassCard variant="subtle" radius="xl" padding="lg">
+          <div className="flex flex-col gap-3 items-center text-center py-6">
+            <p className="text-base font-medium" style={{ color: "var(--text-primary)" }}>
+              Sign in to view your favourites
+            </p>
+            <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
+              Follow horses, jockeys and trainers to keep track of them all in one place.
+            </p>
+            <Link
+              href="/auth/signin"
+              className="mt-2 px-5 py-2.5 rounded-[var(--radius-md)] text-sm font-semibold text-white transition-opacity hover:opacity-90"
+              style={{ background: "var(--green-800)" }}
+            >
+              Sign in
+            </Link>
+          </div>
+        </GlassCard>
+      </main>
+    );
+  }
 
   const { tab: tabParam } = await searchParams;
   const tab: Tab =

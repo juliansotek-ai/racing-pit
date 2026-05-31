@@ -212,7 +212,7 @@ export default async function DashboardPage() {
 
       {/* ── Upcoming Meetings ──────────────────────────────────────── */}
       <section className="flex flex-col gap-4">
-        <SectionHeader title="Upcoming Meetings" href="/races" count={upcomingMeetings.length} />
+        <SectionHeader title="Upcoming Meetings" href="/races/upcoming" count={upcomingMeetings.length} />
 
         {upcomingMeetings.length === 0 ? (
           <EmptyState label="No upcoming races" />

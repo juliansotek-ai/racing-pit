@@ -175,7 +175,16 @@ export default async function RacesPage() {
 
       {upcoming.length > 0 && (
         <section className="flex flex-col gap-4">
-          <h2 className="display-md" style={{ color: "var(--green-900)" }}>Upcoming</h2>
+          <div className="flex items-center justify-between">
+            <h2 className="display-md" style={{ color: "var(--green-900)" }}>Upcoming</h2>
+            <Link
+              href="/races/upcoming"
+              className="text-xs font-medium transition-colors hover:underline"
+              style={{ color: "var(--text-tertiary)" }}
+            >
+              View all →
+            </Link>
+          </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {upcoming.map((m) => <MeetingCard key={m.key} meeting={m} />)}
           </div>

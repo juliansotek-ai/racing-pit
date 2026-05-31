@@ -131,6 +131,86 @@ export async function getFollowedHorsesRacingToday(userId: string) {
   });
 }
 
+export async function getUpcomingMeetingsAll(from?: Date, to?: Date) {
+  const now = new Date();
+  const start = from && from > now ? from : now;
+
+  const toEnd = to ? new Date(to) : undefined;
+  if (toEnd) toEnd.setUTCHours(23, 59, 59, 999);
+
+  const races = await prisma.race.findMany({
+    where: {
+      status: "SCHEDULED",
+      scheduledAt: {
+        gte: start,
+        ...(toEnd ? { lte: toEnd } : {}),
+      },
+    },
+    include: {
+      racecourse: { select: { id: true, name: true, city: true } },
+      entries: { select: { id: true } },
+    },
+    orderBy: { scheduledAt: "asc" },
+  });
+
+  const map = new Map<
+    string,
+    {
+      date: string;
+      racecourseId: string;
+      racecourse: { name: string; city: string };
+      raceCount: number;
+      firstStart: Date;
+      totalRunners: number;
+    }
+  >();
+
+  for (const race of races) {
+    const dateStr = new Date(race.scheduledAt).toISOString().slice(0, 10);
+    const key = `${dateStr}:${race.racecourseId}`;
+    if (!map.has(key)) {
+      map.set(key, {
+        date: dateStr,
+        racecourseId: race.racecourseId,
+        racecourse: race.racecourse,
+        raceCount: 0,
+        firstStart: new Date(race.scheduledAt),
+        totalRunners: 0,
+      });
+    }
+    const m = map.get(key)!;
+    m.raceCount++;
+    m.totalRunners += race.entries.length;
+    if (new Date(race.scheduledAt) < m.firstStart) {
+      m.firstStart = new Date(race.scheduledAt);
+    }
+  }
+
+  return Array.from(map.values()).sort(
+    (a, b) => a.firstStart.getTime() - b.firstStart.getTime()
+  );
+}
+
+export async function getUpcomingDateRange() {
+  const now = new Date();
+  const [first, last] = await Promise.all([
+    prisma.race.findFirst({
+      where: { status: "SCHEDULED", scheduledAt: { gte: now } },
+      orderBy: { scheduledAt: "asc" },
+      select: { scheduledAt: true },
+    }),
+    prisma.race.findFirst({
+      where: { status: "SCHEDULED", scheduledAt: { gte: now } },
+      orderBy: { scheduledAt: "desc" },
+      select: { scheduledAt: true },
+    }),
+  ]);
+  return {
+    min: first ? new Date(first.scheduledAt).toISOString().slice(0, 10) : null,
+    max: last ? new Date(last.scheduledAt).toISOString().slice(0, 10) : null,
+  };
+}
+
 export async function getUpcomingMeetings(limit = 6) {
   const races = await prisma.race.findMany({
     where: { status: "SCHEDULED", scheduledAt: { gte: new Date() } },

@@ -1,5 +1,4 @@
 export const dynamic = "force-dynamic";
-import { redirect } from "next/navigation";
 import Link from "next/link";
 import { format, startOfDay, endOfDay } from "date-fns";
 import { auth } from "@/lib/auth";
@@ -60,7 +59,38 @@ function groupByRace(bets: Bet[]) {
 
 export default async function BetsTodayPage() {
   const session = await auth();
-  if (!session?.user?.id) redirect("/auth/signin");
+  if (!session?.user?.id) {
+    return (
+      <main className="flex flex-col min-h-screen px-6 py-12 max-w-5xl mx-auto gap-8">
+        <div className="flex flex-col gap-1">
+          <p className="text-xs font-medium uppercase tracking-widest" style={{ color: "var(--text-tertiary)" }}>
+            {format(new Date(), "EEEE, d MMMM yyyy")}
+          </p>
+          <h1 className="display-xl" style={{ color: "var(--green-900)", fontFamily: "var(--font-display)" }}>
+            Race Day
+          </h1>
+        </div>
+        <BetsTabStrip />
+        <GlassCard variant="subtle" radius="xl" padding="lg">
+          <div className="flex flex-col gap-3 items-center text-center py-6">
+            <p className="text-base font-medium" style={{ color: "var(--text-primary)" }}>
+              Sign in to view your Race Day
+            </p>
+            <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
+              See all your bets for today&apos;s races once you&apos;re logged in.
+            </p>
+            <Link
+              href="/auth/signin"
+              className="mt-2 px-5 py-2.5 rounded-[var(--radius-md)] text-sm font-semibold text-white transition-opacity hover:opacity-90"
+              style={{ background: "var(--green-800)" }}
+            >
+              Sign in
+            </Link>
+          </div>
+        </GlassCard>
+      </main>
+    );
+  }
 
   const [bets, pastUnsettledCount] = await Promise.all([
     getTodayBets(session.user.id),
