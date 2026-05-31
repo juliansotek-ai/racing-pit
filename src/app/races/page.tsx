@@ -133,12 +133,15 @@ export default async function RacesPage() {
   const all = await getRaces();
   const meetings = groupIntoMeetings(all);
 
+  const now = new Date();
+
   const upcoming = meetings
-    .filter((m) => m.status === "SCHEDULED" || m.status === "POSTPONED")
+    .filter((m) => (m.status === "SCHEDULED" || m.status === "POSTPONED") && m.firstStart >= now)
     .sort((a, b) => a.firstStart.getTime() - b.firstStart.getTime());
 
   const past = meetings
-    .filter((m) => m.status === "COMPLETED" || m.status === "CANCELLED")
+    .filter((m) => m.status === "COMPLETED" || m.status === "CANCELLED" ||
+      ((m.status === "SCHEDULED" || m.status === "POSTPONED") && m.firstStart < now))
     .sort((a, b) => b.firstStart.getTime() - a.firstStart.getTime());
 
   return (
